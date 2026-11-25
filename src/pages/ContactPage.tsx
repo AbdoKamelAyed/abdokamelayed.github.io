@@ -19,8 +19,8 @@ export const ContactPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data,
     if (!c.email) {
       setNotice(
         L(
-          "No public email address is configured yet. Add one in Admin Workspace → Website Settings to enable direct mailto links, or reach out via GitHub.",
-          "لم يتم ضبط بريد إلكتروني عام بعد. يمكنك إضافته من مساحة الإدارة لتفعيل الإرسال المباشر أو التواصل عبر GitHub.",
+          "No public email address is configured yet. Please reach out via GitHub or the public channels listed on this page.",
+          "لم يتم ضبط بريد إلكتروني عام بعد. يمكنك التواصل عبر GitHub أو القنوات العامة المدرجة في هذه الصفحة.",
           lang
         )
       );

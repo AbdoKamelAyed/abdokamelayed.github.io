@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Layers, Menu, Moon, Search, SlidersHorizontal, Sun, X } from "lucide-react";
+import { Layers, Menu, Moon, Search, Sun, X } from "lucide-react";
 import type { HubDatasets, Lang } from "../types/hub";
 import { buildSearchIndex, searchDocuments } from "../utils/analytics";
 import { L, t } from "../utils/i18n";
@@ -72,6 +72,9 @@ export const Layout: React.FC<LayoutProps> = ({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSearchOpen((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        window.location.hash = "#/admin";
       } else if (e.key === "Escape") {
         setSearchOpen(false);
       }
@@ -195,20 +198,6 @@ export const Layout: React.FC<LayoutProps> = ({
               <Layers className="w-4 h-4" />
             </button>
 
-            <a
-              href="#/admin"
-              aria-label={t("nav.admin", lang)}
-              title={t("nav.admin", lang)}
-              className={`h-9 px-2.5 inline-flex items-center gap-1.5 rounded-lg border text-xs font-medium whitespace-nowrap shrink-0 ${
-                section === "admin"
-                  ? "border-blue-600 text-blue-600 dark:text-blue-400"
-                  : "border-[var(--hub-border)] text-[var(--hub-text-muted)] hover:text-[var(--hub-text)]"
-              }`}
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-              <span className="hidden sm:inline">{t("nav.admin", lang)}</span>
-            </a>
-
             <button
               type="button"
               onClick={() => setMobileOpen((p) => !p)}
@@ -265,7 +254,6 @@ export const Layout: React.FC<LayoutProps> = ({
             <a href="#/journal" className="hover:text-[var(--hub-text)]">{t("nav.journal", lang)}</a>
             <a href="#/about" className="hover:text-[var(--hub-text)]">{t("nav.about", lang)}</a>
             <a href="#/contact" className="hover:text-[var(--hub-text)]">{t("nav.contact", lang)}</a>
-            <a href="#/admin" className="hover:text-[var(--hub-text)]">{t("nav.admin", lang)}</a>
           </div>
         </div>
       </footer>
