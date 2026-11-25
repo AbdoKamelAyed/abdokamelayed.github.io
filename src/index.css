@@ -126,6 +126,8 @@
   nav,
   a[href="#main-content"],
   [data-testid="reading-progress-bar"],
+  [data-testid="article-lightbox"],
+  [data-testid="article-toc"],
   [role="progressbar"],
   #main-content > div > div:has(> a[href="#/journal"]),
   section[aria-labelledby="related-reading-heading"] {
@@ -205,10 +207,20 @@
     widows: 3;
   }
 
-  article header p {
+  article header > p {
     font-size: 12.5pt !important;
     line-height: 1.5 !important;
     color: #334155 !important;
+  }
+
+  [data-testid="article-summary"] {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  [data-testid="article-summary"] p {
+    font-size: 10pt !important;
+    line-height: 1.55 !important;
   }
 
   article blockquote {
@@ -240,7 +252,7 @@
     font-size: 9.5pt !important;
   }
 
-  article div:has(> img) {
+  article div:has(img) {
     aspect-ratio: auto !important;
     height: auto !important;
     background: transparent !important;
@@ -267,6 +279,18 @@
     font-size: 8.5pt;
     color: #475569;
     word-break: break-all;
+  }
+
+  .issue-edition-sheet .issue-chapter + .issue-chapter {
+    break-before: page;
+    page-break-before: always;
+    border-top: none !important;
+    padding-top: 0 !important;
+  }
+
+  .print\:hidden,
+  [data-testid="media-viewer-toolbar"] {
+    display: none !important;
   }
 }
 

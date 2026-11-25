@@ -10,6 +10,7 @@ import {
   Heading2,
   Heading3,
   Italic,
+  Layers,
   Link2,
   List,
   Plus,
@@ -22,6 +23,7 @@ import type { ArticleRecord, HubDatasets, Lang } from "../../types/hub";
 import { saveLocalDraft } from "../../services/dataService";
 import { calculateReadingTimeMinutes, countWords, slugify } from "../../utils/analytics";
 import { formatDateTime, L, loc } from "../../utils/i18n";
+import { AuthorAvatar, DEFAULT_AUTHOR_AVATAR } from "../AuthorProfileCard";
 import { RichContentView } from "../RichContentView";
 
 function toDatetimeLocalValue(iso: string | null | undefined): string {
@@ -89,12 +91,16 @@ export const ArticleRichEditor: React.FC<{
   const [featured, setFeatured] = useState(false);
 
   // Author & Date/Time metadata
+  const defaultAvatar = data.profileSettings.avatarUrl || DEFAULT_AUTHOR_AVATAR;
   const [author, setAuthor] = useState(defaultAuthor);
   const [authorHandle, setAuthorHandle] = useState(defaultHandle);
+  const [authorAvatar, setAuthorAvatar] = useState(defaultAvatar);
+  const [authorBio, setAuthorBio] = useState(loc(data.profileSettings.shortBio, "en") || "");
   const [publishedLocal, setPublishedLocal] = useState(() => toDatetimeLocalValue(null));
   const [updatedLocal, setUpdatedLocal] = useState(() => toDatetimeLocalValue(null));
   const [autoTouchUpdated, setAutoTouchUpdated] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showEmbedPicker, setShowEmbedPicker] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -134,6 +140,8 @@ export const ArticleRichEditor: React.FC<{
     setFeatured(false);
     setAuthor(defaultAuthor);
     setAuthorHandle(defaultHandle);
+    setAuthorAvatar(defaultAvatar);
+    setAuthorBio(loc(data.profileSettings.shortBio, "en") || "");
     setPublishedLocal(now);
     setUpdatedLocal(now);
     setAutoTouchUpdated(true);
@@ -157,6 +165,8 @@ export const ArticleRichEditor: React.FC<{
     setFeatured(Boolean(art.featured));
     setAuthor(art.author || defaultAuthor);
     setAuthorHandle(art.authorHandle || defaultHandle);
+    setAuthorAvatar(art.authorAvatar || defaultAvatar);
+    setAuthorBio(art.authorBio ? loc(art.authorBio, "en") : loc(data.profileSettings.shortBio, "en") || "");
     setPublishedLocal(toDatetimeLocalValue(art.publishedAt));
     setUpdatedLocal(toDatetimeLocalValue(art.updatedAt));
   };
@@ -212,6 +222,8 @@ export const ArticleRichEditor: React.FC<{
               coverImage: coverImage.trim() || undefined,
               author: author.trim() || defaultAuthor,
               authorHandle: authorHandle.trim() || undefined,
+              authorAvatar: authorAvatar.trim() || undefined,
+              authorBio: authorBio.trim() ? { en: authorBio.trim(), ar: authorBio.trim() } : undefined,
               publishedAt: publishedIso,
               categories: resolvedCategories,
               tags,
@@ -236,6 +248,8 @@ export const ArticleRichEditor: React.FC<{
         coverImage: coverImage.trim() || undefined,
         author: author.trim() || defaultAuthor,
         authorHandle: authorHandle.trim() || undefined,
+        authorAvatar: authorAvatar.trim() || undefined,
+        authorBio: authorBio.trim() ? { en: authorBio.trim(), ar: authorBio.trim() } : undefined,
         publishedAt: publishedIso,
         categories: resolvedCategories,
         tags,
@@ -621,6 +635,47 @@ export const ArticleRichEditor: React.FC<{
               </label>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[var(--hub-border)]">
+            <div className="flex items-center gap-3">
+              <AuthorAvatar src={authorAvatar} name={author || defaultAuthor} sizeClass="w-10 h-10" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="editor-author-avatar" className="text-xs font-semibold text-[var(--hub-text-muted)]">
+                    {L("Author Portrait URL", "صورة الكاتب", lang)}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAuthorAvatar(defaultAvatar)}
+                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  >
+                    {L("Use Site Profile", "من الملف الرئيسي", lang)}
+                  </button>
+                </div>
+                <input
+                  id="editor-author-avatar"
+                  type="text"
+                  dir="ltr"
+                  value={authorAvatar}
+                  onChange={(e) => setAuthorAvatar(e.target.value)}
+                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="editor-author-bio" className="text-xs font-semibold text-[var(--hub-text-muted)] block">
+                {L("Author Card Bio", "نبذة بطاقة الكاتب", lang)}
+              </label>
+              <input
+                id="editor-author-bio"
+                type="text"
+                value={authorBio}
+                onChange={(e) => setAuthorBio(e.target.value)}
+                placeholder={L("Short author bio displayed under the article...", "نبذة قصيرة تظهر أسفل المقال...", lang)}
+                className="mt-1 w-full px-3 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Title, Subtitle, Slug */}
@@ -684,6 +739,55 @@ export const ArticleRichEditor: React.FC<{
               <button type="button" onClick={() => insertFormatting("`", "`", "code")} title="Inline Code" className="p-1.5 rounded hover:bg-slate-200/60 dark:hover:bg-slate-700/60 cursor-pointer"><Code className="w-4 h-4" /></button>
               <button type="button" onClick={() => insertFormatting("```ts\n", "\n```", "const hub = true;")} title="Code Block" className="px-2 py-1 rounded text-xs font-mono hover:bg-slate-200/60 dark:hover:bg-slate-700/60 cursor-pointer">{"{ }"}</button>
               <button type="button" onClick={() => insertFormatting("[", "](https://abdokamelayed.github.io)", "Link label")} title="Insert Link" className="p-1.5 rounded hover:bg-slate-200/60 dark:hover:bg-slate-700/60 cursor-pointer"><Link2 className="w-4 h-4" /></button>
+              <button
+                type="button"
+                onClick={() => setShowEmbedPicker((v) => !v)}
+                className={`ms-1 px-2.5 py-1 rounded text-xs font-semibold inline-flex items-center gap-1 cursor-pointer ${
+                  showEmbedPicker
+                    ? "bg-blue-600 text-white"
+                    : "border border-[var(--hub-border)] hover:bg-slate-200/60 dark:hover:bg-slate-700/60"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>{L("Embed Media", "تضمين وسائط", lang)}</span>
+              </button>
+            </div>
+          )}
+
+          {viewMode !== "preview" && showEmbedPicker && (
+            <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-[var(--hub-text-muted)]">
+                  {L("Click an asset to embed via custom viewer:", "اختر ملفاً لتضمينه في المقال:", lang)}
+                </span>
+                <span className="font-mono text-[11px] text-[var(--hub-text-muted)]">
+                  [[embed:assetId]]
+                </span>
+              </div>
+              {data.mediaAssets.length === 0 ? (
+                <p className="text-xs text-[var(--hub-text-muted)]">
+                  {L("No media assets uploaded yet. Upload PDF, Image, Video, Audio, or Code in Media Library.", "لا توجد وسائط بعد. ارفع ملفاتك من مكتبة الوسائط.", lang)}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {data.mediaAssets.map((asset) => (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => {
+                        insertFormatting(`\n[[embed:${asset.id}|`, "]]\n", loc(asset.title, editorLang));
+                        setShowEmbedPicker(false);
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs hover:border-blue-600 inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span className="font-mono uppercase text-[10px] text-blue-600 dark:text-blue-400">
+                        {asset.mediaType}
+                      </span>
+                      <span className="truncate max-w-[180px]">{loc(asset.title, editorLang)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -727,7 +831,7 @@ export const ArticleRichEditor: React.FC<{
                   </div>
                 </div>
                 {activeContent.trim() ? (
-                  <RichContentView content={activeContent} />
+                  <RichContentView content={activeContent} mediaAssets={data.mediaAssets} lang={editorLang} />
                 ) : (
                   <p className="text-xs text-[var(--hub-text-muted)] italic">
                     {L("Live preview renders as you write...", "تظهر المعاينة الحية أثناء الكتابة...", editorLang)}
@@ -814,15 +918,26 @@ export const ArticleRichEditor: React.FC<{
           </div>
 
           <div>
-            <label htmlFor="editor-seo" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-              {L("SEO Meta Description", "وصف SEO", lang)}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="editor-seo" className="text-xs font-semibold text-[var(--hub-text-muted)]">
+                {L("SEO Meta Description", "وصف SEO", lang)}
+              </label>
+              <span
+                className={`text-[11px] font-mono tabular-nums ${
+                  seoEn.trim().length >= 60 && seoEn.trim().length <= 165
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                {seoEn.trim().length}/160 {L("optimal", "مثالي", lang)}
+              </span>
+            </div>
             <input
               id="editor-seo"
               type="text"
               value={seoEn}
               onChange={(e) => setSeoEn(e.target.value)}
-              placeholder={L("Concise search summary...", "وصف موجز لمحركات البحث...", lang)}
+              placeholder={L("Concise 110–160 char search summary...", "وصف موجز بين 110 و160 حرفاً لمحركات البحث...", lang)}
               className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
             />
             <label className="mt-2 inline-flex items-center gap-2 text-xs cursor-pointer">

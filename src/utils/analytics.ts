@@ -9,6 +9,7 @@ import type {
   ProjectRecord,
 } from "../types/hub";
 import { loc } from "./i18n";
+import { parseMarkdownBlocks, tokenizeInlineMarkdown } from "./markdown";
 
 export function safeUrl(url: string | null | undefined): string {
   if (!url || typeof url !== "string") return "";
@@ -25,6 +26,16 @@ export function safeUrl(url: string | null | undefined): string {
     return "";
   }
   return "";
+}
+
+export function safeMediaUrl(url: string | null | undefined): string {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (trimmed.startsWith("idb://")) return trimmed;
+  if (/^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) {
+    return trimmed;
+  }
+  return safeUrl(trimmed);
 }
 
 export function slugify(input: string): string {
@@ -285,4 +296,82 @@ export function getRelatedArticles(
     .map((entry) => entry.candidate);
 }
 
+export interface ArticleSummaryResult {
+  text: string;
+  source: "abstract" | "excerpt";
+}
+
+function stripInlineMarkdown(text: string): string {
+  return tokenizeInlineMarkdown(text)
+    .map((token) => token.text)
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncateSummary(text: string, maxLength: number): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean || clean.length <= maxLength) return clean;
+
+  const slice = clean.slice(0, maxLength);
+  const sentenceEnd = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf("! "),
+    slice.lastIndexOf("? "),
+    slice.lastIndexOf("؟ "),
+    slice.lastIndexOf("۔ ")
+  );
+  if (sentenceEnd >= Math.floor(maxLength * 0.45)) {
+    return slice.slice(0, sentenceEnd + 1).trim();
+  }
+
+  const lastSpace = slice.lastIndexOf(" ");
+  if (lastSpace > Math.floor(maxLength * 0.5)) {
+    return `${slice.slice(0, lastSpace).trim()}…`;
+  }
+  return `${slice.trim()}…`;
+}
+
+export function extractArticleSummary(
+  article: Pick<ArticleRecord, "abstract" | "content">,
+  lang: Lang,
+  maxLength = 220
+): ArticleSummaryResult | null {
+  const rawAbstract = article.abstract ? loc(article.abstract, lang) : "";
+  const cleanAbstract = rawAbstract ? stripInlineMarkdown(rawAbstract) : "";
+  if (cleanAbstract) {
+    return {
+      text: truncateSummary(cleanAbstract, Math.round(maxLength * 1.4)),
+      source: "abstract",
+    };
+  }
+
+  const rawContent = loc(article.content, lang);
+  if (!rawContent || !rawContent.trim()) return null;
+
+  const blocks = parseMarkdownBlocks(rawContent);
+  const firstProse =
+    blocks.find((b) => b.type === "p") ||
+    blocks.find((b) => b.type === "blockquote") ||
+    blocks.find((b) => b.type === "ul");
+
+  if (!firstProse) return null;
+
+  const rawText =
+    firstProse.type === "ul"
+      ? firstProse.items.join(" · ")
+      : firstProse.type === "p" || firstProse.type === "blockquote"
+        ? firstProse.text
+        : "";
+
+  const cleanExcerpt = stripInlineMarkdown(rawText);
+  if (!cleanExcerpt) return null;
+
+  return {
+    text: truncateSummary(cleanExcerpt, maxLength),
+    source: "excerpt",
+  };
+}
+
 export type { ExperienceDataset, KnowledgeEntry };
+

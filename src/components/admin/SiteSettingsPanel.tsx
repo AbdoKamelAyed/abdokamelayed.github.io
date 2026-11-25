@@ -1,9 +1,44 @@
-import React, { useState } from "react";
-import { Check, Download, Globe, KeyRound, Palette, Plus, Trash2, User } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  Download,
+  FileCode2,
+  Globe,
+  KeyRound,
+  Palette,
+  Plus,
+  SearchCheck,
+  Trash2,
+  Upload,
+  User,
+  Users,
+  XCircle,
+} from "lucide-react";
 import type { HubDatasets, Lang } from "../../types/hub";
 import { saveLocalDraft } from "../../services/dataService";
-import { setupAdminCredential } from "../../utils/adminAuth";
+import { readFileAsDataUrl } from "../../services/mediaLibraryService";
+import {
+  evaluatePassphraseStrength,
+  listAdminAccounts,
+  removeAdminAccount,
+  setupAdminCredential,
+  type AdminAccountRecord,
+} from "../../utils/adminAuth";
+import { safeMediaUrl } from "../../utils/analytics";
 import { L, loc } from "../../utils/i18n";
+import { analyzeSeoAudit, generateRobotsTxt, generateSitemapXml } from "../../utils/seoEngine";
+import { AuthorAvatar, DEFAULT_AUTHOR_AVATAR } from "../AuthorProfileCard";
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  window.setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
 
 export const SiteSettingsPanel: React.FC<{
   data: HubDatasets;
@@ -47,8 +82,11 @@ export const SiteSettingsPanel: React.FC<{
       ? data.website.seoDescription
       : data.website.seoDescription.ar || ""
   );
+  const [ogImage, setOgImage] = useState(data.website.ogImage || DEFAULT_AUTHOR_AVATAR);
+  const [twitterHandle, setTwitterHandle] = useState(data.website.twitterHandle || "");
+  const [seoKeywordsInput, setSeoKeywordsInput] = useState((data.website.seoKeywords || []).join(", "));
 
-  // Profile & identity settings
+  // Profile & author identity settings
   const [fullNameEn, setFullNameEn] = useState(
     typeof data.profileSettings.fullName === "string"
       ? data.profileSettings.fullName
@@ -60,6 +98,22 @@ export const SiteSettingsPanel: React.FC<{
       : data.profileSettings.fullName.ar || ""
   );
   const [githubUsername, setGithubUsername] = useState(data.profileSettings.githubUsername);
+  const [avatarUrl, setAvatarUrl] = useState(data.profileSettings.avatarUrl || DEFAULT_AUTHOR_AVATAR);
+  const [roleTitleEn, setRoleTitleEn] = useState(
+    typeof data.profileSettings.roleTitle === "string"
+      ? data.profileSettings.roleTitle
+      : data.profileSettings.roleTitle?.en || ""
+  );
+  const [roleTitleAr, setRoleTitleAr] = useState(
+    typeof data.profileSettings.roleTitle === "string"
+      ? data.profileSettings.roleTitle
+      : data.profileSettings.roleTitle?.ar || ""
+  );
+  const [locationEn, setLocationEn] = useState(
+    typeof data.profileSettings.location === "string"
+      ? data.profileSettings.location
+      : data.profileSettings.location?.en || "Egypt"
+  );
   const [headlineEn, setHeadlineEn] = useState(
     typeof data.profileSettings.headline === "string"
       ? data.profileSettings.headline
@@ -93,10 +147,57 @@ export const SiteSettingsPanel: React.FC<{
     data.profileSettings.contact.otherLinks || []
   );
 
-  // Admin Vault passphrase update
+  // Admin Vault passphrase & multi-account directory
   const [vaultUser, setVaultUser] = useState(adminUsername);
   const [newPass, setNewPass] = useState("");
   const [vaultStatus, setVaultStatus] = useState("");
+  const [accounts, setAccounts] = useState<AdminAccountRecord[]>(() => listAdminAccounts());
+
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
+  const passStrength = evaluatePassphraseStrength(newPass);
+
+  const liveSeoData: HubDatasets = useMemo(
+    () => ({
+      ...data,
+      website: {
+        ...data.website,
+        siteName,
+        shortTitle,
+        domain,
+        ogImage,
+        twitterHandle,
+        seoDescription: { en: seoEn, ar: seoAr || seoEn },
+      },
+      profileSettings: {
+        ...data.profileSettings,
+        avatarUrl,
+        fullName: { en: fullNameEn, ar: fullNameAr || fullNameEn },
+      },
+    }),
+    [data, siteName, shortTitle, domain, ogImage, twitterHandle, seoEn, seoAr, avatarUrl, fullNameEn, fullNameAr]
+  );
+
+  const seoDiagnostics = useMemo(() => analyzeSeoAudit(liveSeoData, lang), [liveSeoData, lang]);
+  const seoPassed = seoDiagnostics.filter((d) => d.status === "pass").length;
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      onNotify(L("Please select an image file for the author portrait.", "يرجى اختيار ملف صورة لصورة الكاتب.", lang));
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      onNotify(L("Portrait image must be under 2 MB.", "حجم صورة الكاتب يجب أن يقل عن 2 ميجابايت.", lang));
+      return;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    if (safeMediaUrl(dataUrl)) {
+      setAvatarUrl(dataUrl);
+      onNotify(L("Portrait loaded into draft. Click Save All Site Settings to apply.", "تم تحميل الصورة. اضغط حفظ الإعدادات لتطبيقها.", lang));
+    }
+    e.target.value = "";
+  };
 
   const handleSaveSiteSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,6 +210,9 @@ export const SiteSettingsPanel: React.FC<{
       domain: domain.trim() || "https://abdokamelayed.github.io",
       version: version.trim() || "1.0.0",
       defaultAuthor: defaultAuthor.trim() || "Abdo Kamel",
+      ogImage: ogImage.trim() || avatarUrl.trim() || DEFAULT_AUTHOR_AVATAR,
+      twitterHandle: twitterHandle.trim() || undefined,
+      seoKeywords: seoKeywordsInput.split(",").map((s) => s.trim()).filter(Boolean),
       defaultLanguage,
       defaultTheme,
       defaultGlassMode,
@@ -128,6 +232,15 @@ export const SiteSettingsPanel: React.FC<{
         ar: fullNameAr.trim() || fullNameEn.trim() || "عبدو كامل",
       },
       githubUsername: githubUsername.trim() || "AbdoKamelAyed",
+      avatarUrl: avatarUrl.trim() || DEFAULT_AUTHOR_AVATAR,
+      roleTitle: {
+        en: roleTitleEn.trim() || "Software Engineer & Systems Builder",
+        ar: roleTitleAr.trim() || roleTitleEn.trim() || "مهندس برمجيات ومطور أنظمة",
+      },
+      location: {
+        en: locationEn.trim() || "Egypt",
+        ar: typeof data.profileSettings.location === "object" ? data.profileSettings.location.ar : locationEn.trim(),
+      },
       headline: {
         en: headlineEn.trim(),
         ar: headlineAr.trim() || headlineEn.trim(),
@@ -155,21 +268,24 @@ export const SiteSettingsPanel: React.FC<{
     saveLocalDraft("./data/settings/profile.json", nextProfile);
     onUpdateData((prev) => ({ ...prev, website: nextWebsite, profileSettings: nextProfile }));
     onApplyWebsiteTheme(nextWebsite);
-    onAudit("Updated Site Settings", nextWebsite.siteName);
-    onNotify(L("Site, profile, theme, and SEO settings saved.", "تم حفظ إعدادات الموقع والهوية والمظهر وSEO.", lang));
+    onAudit("Updated Site Settings & SEO", nextWebsite.siteName);
+    onNotify(L("Site, author profile, theme, and SEO settings saved.", "تم حفظ إعدادات الموقع والكاتب والمظهر وSEO.", lang));
   };
 
   const handleUpdatePassphrase = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPass.length < 4) {
-      setVaultStatus(L("Passphrase must be at least 4 characters.", "كلمة المرور يجب أن تكون 4 أحرف على الأقل.", lang));
+    if (!passStrength.valid) {
+      setVaultStatus(L(passStrength.issues[0] || "Choose a stronger passphrase (min 8 chars + mix).", "اختر كلمة مرور أقوى (8 أحرف على الأقل مع أرقام أو رموز).", lang));
       return;
     }
     await setupAdminCredential(vaultUser, newPass, 8);
     setNewPass("");
+    setAccounts(listAdminAccounts());
     onAudit("Rotated Admin Passphrase", vaultUser);
-    setVaultStatus(L("Admin vault passphrase updated cleanly.", "تم تحديث كلمة مرور الإدارة بنجاح.", lang));
+    setVaultStatus(L("PBKDF2 admin credential updated cleanly.", "تم تحديث كلمة مرور الإدارة (PBKDF2) بنجاح.", lang));
   };
+
+  const safePreviewOg = safeMediaUrl(ogImage) || DEFAULT_AUTHOR_AVATAR;
 
   return (
     <div className="space-y-8">
@@ -322,12 +438,54 @@ export const SiteSettingsPanel: React.FC<{
             </div>
           </section>
 
-          {/* Author & Profile Identity */}
+          {/* Author Portrait & Identity */}
           <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
             <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
               <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>{L("Owner Profile & Default Author", "الهوية والكاتب الافتراضي", lang)}</span>
+              <span>{L("Author Portrait & Public Profile", "صورة الكاتب والملف التعريفي", lang)}</span>
             </h2>
+
+            {/* Portrait uploader + live preview */}
+            <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-3.5 flex flex-col sm:flex-row sm:items-center gap-4">
+              <AuthorAvatar src={avatarUrl} name={fullNameEn || "Abdo Kamel"} sizeClass="w-16 h-16" />
+              <div className="flex-1 min-w-0 space-y-2">
+                <label htmlFor="set-avatar-url" className="text-xs font-semibold text-[var(--hub-text-muted)] block">
+                  {L("Author Portrait URL or Upload", "رابط أو رفع صورة الكاتب", lang)}
+                </label>
+                <input
+                  id="set-avatar-url"
+                  type="text"
+                  dir="ltr"
+                  value={avatarUrl}
+                  onChange={(e) => setAvatarUrl(e.target.value)}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={avatarFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="sr-only"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => avatarFileInputRef.current?.click()}
+                    className="px-2.5 py-1 rounded border border-[var(--hub-border)] text-[11px] font-semibold inline-flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>{L("Upload Portrait", "رفع صورة", lang)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvatarUrl(DEFAULT_AUTHOR_AVATAR)}
+                    className="px-2.5 py-1 rounded border border-[var(--hub-border)] text-[11px] hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    {L("Studio Portrait", "الصورة الافتراضية", lang)}
+                  </button>
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -377,6 +535,30 @@ export const SiteSettingsPanel: React.FC<{
                   dir="rtl"
                   value={fullNameAr}
                   onChange={(e) => setFullNameAr(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="set-role-en" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Author Role Title (EN)", "المسمى المهني (EN)", lang)}
+                </label>
+                <input
+                  id="set-role-en"
+                  type="text"
+                  value={roleTitleEn}
+                  onChange={(e) => setRoleTitleEn(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="set-location-en" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Author Location", "الموقع", lang)}
+                </label>
+                <input
+                  id="set-location-en"
+                  type="text"
+                  value={locationEn}
+                  onChange={(e) => setLocationEn(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
                 />
               </div>
@@ -438,30 +620,31 @@ export const SiteSettingsPanel: React.FC<{
               </div>
             </div>
 
-            <div>
-              <label htmlFor="set-interests" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-                {L("Technical Interests (comma separated)", "الاهتمامات التقنية", lang)}
-              </label>
-              <input
-                id="set-interests"
-                type="text"
-                value={interestsInput}
-                onChange={(e) => setInterestsInput(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="set-mission-en" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-                {L("Engineering Mission (EN)", "الرسالة الهندسية", lang)}
-              </label>
-              <input
-                id="set-mission-en"
-                type="text"
-                value={missionEn}
-                onChange={(e) => setMissionEn(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="set-interests" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Technical Interests", "الاهتمامات التقنية", lang)}
+                </label>
+                <input
+                  id="set-interests"
+                  type="text"
+                  value={interestsInput}
+                  onChange={(e) => setInterestsInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="set-mission-en" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Engineering Mission (EN)", "الرسالة الهندسية", lang)}
+                </label>
+                <input
+                  id="set-mission-en"
+                  type="text"
+                  value={missionEn}
+                  onChange={(e) => setMissionEn(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
             </div>
           </section>
 
@@ -564,40 +747,155 @@ export const SiteSettingsPanel: React.FC<{
             </div>
           </section>
 
-          {/* SEO & SERP Preview */}
-          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
-            <h2 className="font-display text-lg font-semibold">{L("SEO Metadata & Search Preview", "بيانات SEO ومعاينة البحث", lang)}</h2>
-
-            <div>
-              <label htmlFor="set-seo-en" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-                {L("Meta Description (EN)", "الوصف التعريفي (EN)", lang)}
-              </label>
-              <textarea
-                id="set-seo-en"
-                rows={2}
-                value={seoEn}
-                onChange={(e) => setSeoEn(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="set-seo-ar" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-                {L("Meta Description (AR)", "الوصف التعريفي (AR)", lang)}
-              </label>
-              <textarea
-                id="set-seo-ar"
-                rows={2}
-                dir="rtl"
-                value={seoAr}
-                onChange={(e) => setSeoAr(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
+          {/* SEO Engine Improver */}
+          <section
+            data-testid="seo-engine-panel"
+            className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+                <SearchCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>{L("SEO Engine & Search Inspector", "محرك تحسين SEO وفحص الظهور", lang)}</span>
+              </h2>
+              <span className="text-xs font-mono tabular-nums text-[var(--hub-text-muted)]">
+                {seoPassed}/{seoDiagnostics.length} {L("checks passing", "فحوصات ناجحة", lang)}
+              </span>
             </div>
 
-            <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-4 space-y-1">
-              <div className="text-[11px] font-mono text-[var(--hub-text-muted)]" dir="ltr">{domain}</div>
-              <div className="text-base font-semibold text-blue-600 dark:text-blue-400">{siteName}</div>
-              <p className="text-xs text-[var(--hub-text-muted)] line-clamp-2">{seoEn}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="set-og-image" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("OpenGraph Share Image URL", "صورة المشاركة الاجتماعية", lang)}
+                </label>
+                <input
+                  id="set-og-image"
+                  type="text"
+                  dir="ltr"
+                  value={ogImage}
+                  onChange={(e) => setOgImage(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label htmlFor="set-seo-keywords" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("SEO Keywords", "الكلمات المفتاحية", lang)}
+                </label>
+                <input
+                  id="set-seo-keywords"
+                  type="text"
+                  value={seoKeywordsInput}
+                  onChange={(e) => setSeoKeywordsInput(e.target.value)}
+                  placeholder="systems, react, engineering"
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="set-seo-en" className="text-xs font-semibold text-[var(--hub-text-muted)]">
+                    {L("Meta Description (EN)", "الوصف التعريفي (EN)", lang)}
+                  </label>
+                  <span className="text-[11px] font-mono tabular-nums text-[var(--hub-text-muted)]">
+                    {seoEn.trim().length}/160
+                  </span>
+                </div>
+                <textarea
+                  id="set-seo-en"
+                  rows={2}
+                  value={seoEn}
+                  onChange={(e) => setSeoEn(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="set-seo-ar" className="text-xs font-semibold text-[var(--hub-text-muted)]">
+                    {L("Meta Description (AR)", "الوصف التعريفي (AR)", lang)}
+                  </label>
+                  <span className="text-[11px] font-mono tabular-nums text-[var(--hub-text-muted)]">
+                    {seoAr.trim().length}/160
+                  </span>
+                </div>
+                <textarea
+                  id="set-seo-ar"
+                  rows={2}
+                  dir="rtl"
+                  value={seoAr}
+                  onChange={(e) => setSeoAr(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Live SERP & Social Card Preview */}
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3 rounded-xl border border-[var(--hub-border)] hub-subtle p-4 items-center">
+              <div className="min-w-0 space-y-1">
+                <div className="text-[11px] font-mono text-[var(--hub-text-muted)] truncate" dir="ltr">
+                  {domain}
+                </div>
+                <div className="text-sm sm:text-base font-semibold text-blue-600 dark:text-blue-400 truncate">
+                  {siteName}
+                </div>
+                <p className="text-xs text-[var(--hub-text-muted)] line-clamp-2">{seoEn}</p>
+              </div>
+              <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-[var(--hub-border)] bg-slate-100 dark:bg-slate-900">
+                <img
+                  src={safePreviewOg}
+                  alt="Social card preview"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+
+            {/* Rule-based Diagnostics */}
+            <ul className="divide-y divide-[var(--hub-border)] border border-[var(--hub-border)] rounded-xl overflow-hidden">
+              {seoDiagnostics.map((item) => (
+                <li key={item.id} className="p-3 flex items-start gap-2.5 text-xs bg-[var(--hub-bg)]">
+                  {item.status === "pass" ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  ) : item.status === "warn" ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold">{item.title}</span>
+                      <span className="font-mono text-[11px] text-[var(--hub-text-muted)]">{item.detail}</span>
+                    </div>
+                    <p className="text-[11px] text-[var(--hub-text-muted)]">{item.fixHint}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  downloadTextFile("sitemap.xml", generateSitemapXml(liveSeoData), "application/xml");
+                  onAudit("Generated sitemap.xml", domain);
+                  onNotify(L("Downloaded dynamic sitemap.xml covering all projects, articles, and issues.", "تم تنزيل sitemap.xml الشامل لجميع الصفحات.", lang));
+                }}
+                className="px-3 py-1.5 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <FileCode2 className="w-3.5 h-3.5" />
+                <span>{L("Download sitemap.xml", "تصدير sitemap.xml", lang)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  downloadTextFile("robots.txt", generateRobotsTxt(domain), "text/plain");
+                  onNotify(L("Downloaded robots.txt with admin disallow rule.", "تم تنزيل robots.txt.", lang));
+                }}
+                className="px-3 py-1.5 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{L("Download robots.txt", "تصدير robots.txt", lang)}</span>
+              </button>
             </div>
           </section>
         </div>
@@ -629,50 +927,122 @@ export const SiteSettingsPanel: React.FC<{
         </div>
       </form>
 
-      {/* Admin Access Credentials Update */}
-      <form
-        onSubmit={handleUpdatePassphrase}
-        className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4 max-w-2xl"
-      >
-        <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
-          <KeyRound className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-          <span>{L("Admin Vault Credentials", "بيانات دخول خزنة الإدارة", lang)}</span>
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="vault-user" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-              {L("Admin Username", "اسم المستخدم", lang)}
-            </label>
-            <input
-              id="vault-user"
-              type="text"
-              value={vaultUser}
-              onChange={(e) => setVaultUser(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm font-mono"
-            />
-          </div>
-          <div>
-            <label htmlFor="vault-pass" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-              {L("New Passphrase", "كلمة المرور الجديدة", lang)}
-            </label>
-            <input
-              id="vault-pass"
-              type="password"
-              value={newPass}
-              onChange={(e) => setNewPass(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-          </div>
-        </div>
-        {vaultStatus && <p className="text-xs text-blue-600 dark:text-blue-400">{vaultStatus}</p>}
-        <button
-          type="submit"
-          className="px-4 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+      {/* Admin Security Credentials + Registered Operators */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <form
+          onSubmit={handleUpdatePassphrase}
+          className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4"
         >
-          {L("Update Admin Passphrase", "تحديث كلمة مرور الإدارة", lang)}
-        </button>
-      </form>
+          <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span>{L("Rotate Admin Passphrase (PBKDF2)", "تحديث كلمة مرور الإدارة (PBKDF2)", lang)}</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="vault-user" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                {L("Admin Username", "اسم المستخدم", lang)}
+              </label>
+              <input
+                id="vault-user"
+                type="text"
+                value={vaultUser}
+                onChange={(e) => setVaultUser(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label htmlFor="vault-pass" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                {L("New Passphrase (min 8 chars)", "كلمة المرور الجديدة", lang)}
+              </label>
+              <input
+                id="vault-pass"
+                type="password"
+                value={newPass}
+                onChange={(e) => setNewPass(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+              />
+            </div>
+          </div>
+          {newPass.length > 0 && (
+            <div className="space-y-1 text-[11px]">
+              <div className="flex items-center justify-between text-[var(--hub-text-muted)]">
+                <span>{L("Strength:", "القوة:", lang)}</span>
+                <span className="font-mono font-semibold">{passStrength.label}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden grid grid-cols-4 gap-0.5">
+                {[1, 2, 3, 4].map((lvl) => (
+                  <span
+                    key={lvl}
+                    className={`h-full ${
+                      passStrength.score >= lvl
+                        ? passStrength.score >= 3
+                          ? "bg-emerald-500"
+                          : "bg-amber-500"
+                        : "bg-transparent"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {vaultStatus && <p className="text-xs text-blue-600 dark:text-blue-400">{vaultStatus}</p>}
+          <button
+            type="submit"
+            className="px-4 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+          >
+            {L("Update PBKDF2 Credential", "تحديث بيانات الأمان", lang)}
+          </button>
+        </form>
+
+        <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>{L("Registered Admin Operators", "حسابات الإدارة المسجلة", lang)} ({accounts.length})</span>
+            </h2>
+            <span className="text-[11px] font-mono text-[var(--hub-text-muted)]">PBKDF2-SHA-256</span>
+          </div>
+          <ul className="divide-y divide-[var(--hub-border)]">
+            {accounts.map((acc) => {
+              const isSelf = acc.username.toLowerCase() === adminUsername.toLowerCase();
+              return (
+                <li key={acc.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <AuthorAvatar src={acc.avatarUrl || avatarUrl} name={acc.displayName} sizeClass="w-8 h-8" />
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">
+                        {acc.displayName} <span className="font-mono text-[var(--hub-text-muted)]">@{acc.username}</span>
+                      </div>
+                      <div className="text-[11px] text-[var(--hub-text-muted)] font-mono">
+                        {acc.role} · {acc.algorithm}
+                      </div>
+                    </div>
+                  </div>
+                  {!isSelf && accounts.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = removeAdminAccount(acc.id);
+                        setAccounts(next);
+                        onAudit("Removed Admin Operator", acc.username);
+                      }}
+                      aria-label={L("Remove operator", "حذف الحساب", lang)}
+                      className="px-2 py-1 rounded border border-red-500/40 text-red-600 dark:text-red-400 cursor-pointer"
+                    >
+                      {L("Remove", "حذف", lang)}
+                    </button>
+                  ) : (
+                    <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                      {isSelf ? L("Active", "نشط", lang) : L("Primary", "أساسي", lang)}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      </div>
     </div>
   );
 };

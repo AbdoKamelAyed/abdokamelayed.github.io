@@ -4,6 +4,7 @@ import {
   calculateArticleScrollProgress,
   calculateReadingTimeMinutes,
   countWords,
+  extractArticleSummary,
   filterAndSortProjects,
   filterAndSortRepos,
   formatBytesCompact,
@@ -14,9 +15,22 @@ import {
   summarizeMonthlyContributions,
   validateCollectionSchema,
 } from "./analytics";
-import { hashPassphrase } from "./adminAuth";
-import { parseMarkdownBlocks, tokenizeInlineMarkdown } from "./markdown";
-import type { ArticleRecord, GitHubContributions, GitHubRepo, ProjectRecord } from "../types/hub";
+import {
+  constantTimeEqual,
+  evaluatePassphraseStrength,
+  hashPassphrase,
+  hashPassphrasePbkdf2,
+} from "./adminAuth";
+import {
+  calculateIssueStats,
+  getIsoWeekKey,
+  getPeriodKeyForCadence,
+  selectArticlesForIssue,
+} from "./issues";
+import { generatePdfBytes } from "./pdfMaker";
+import { analyzeSeoAudit, generateRobotsTxt, generateSitemapXml } from "./seoEngine";
+import { extractTableOfContents, parseMarkdownBlocks, tokenizeInlineMarkdown } from "./markdown";
+import type { ArticleRecord, GitHubContributions, GitHubRepo, HubDatasets, ProjectRecord } from "../types/hub";
 
 test("safeUrl allows safe schemes and blocks javascript/data URIs", () => {
   assert.equal(safeUrl("https://github.com/AbdoKamelAyed"), "https://github.com/AbdoKamelAyed");
@@ -242,21 +256,204 @@ test("getRelatedArticles suggests up to 3 articles sharing tags or categories ra
   assert.equal(related.some((r) => r.id === "base" || r.id === "unrelated"), false);
 });
 
-test("parseMarkdownBlocks parses headings, lists, quotes, code fences, and inline tokens", () => {
-  const md = "## Architecture\n\n> Clean separation.\n\n- Item **one**\n- Item [two](https://abdokamelayed.github.io)\n\n```ts\nconst x = 1;\n```";
+test("parseMarkdownBlocks parses headings, lists, quotes, code fences, images, embeds, and inline tokens", () => {
+  const md = "## Architecture\n\n[[embed:asset-code-pipeline|Pipeline Script]]\n\n![System diagram](/assets/diagram.png)\n\n> Clean separation.\n\n- Item **one**\n- Item [two](https://abdokamelayed.github.io)\n\n```ts\nconst x = 1;\n```";
   const blocks = parseMarkdownBlocks(md);
-  assert.deepEqual(blocks.map((b) => b.type), ["h2", "blockquote", "ul", "code"]);
+  assert.deepEqual(blocks.map((b) => b.type), ["h2", "embed", "img", "blockquote", "ul", "code"]);
+  assert.deepEqual(blocks[1], { type: "embed", assetId: "asset-code-pipeline", caption: "Pipeline Script" });
   const tokens = tokenizeInlineMarkdown("Hello **bold** and `code`");
   assert.equal(tokens.length, 4);
   assert.equal(tokens[1].type, "bold");
   assert.equal(tokens[3].type, "code");
 });
 
-test("hashPassphrase produces deterministic salted SHA-256 hex digests", async () => {
+test("PBKDF2-SHA-256 hashing, passphrase strength check, and constantTimeEqual work reliably", async () => {
   const h1 = await hashPassphrase("secret-pass", "salt123");
   const h2 = await hashPassphrase("secret-pass", "salt123");
-  const h3 = await hashPassphrase("secret-pass", "different-salt");
   assert.equal(h1.length, 64);
-  assert.equal(h1, h2);
-  assert.notEqual(h1, h3);
+  assert.equal(constantTimeEqual(h1, h2), true);
+  assert.equal(constantTimeEqual(h1, "short"), false);
+
+  const p1 = await hashPassphrasePbkdf2("StrongPass!2026", "salthex123", 1000);
+  const p2 = await hashPassphrasePbkdf2("StrongPass!2026", "salthex123", 1000);
+  const p3 = await hashPassphrasePbkdf2("Different!2026", "salthex123", 1000);
+  assert.equal(p1.length, 64);
+  assert.equal(p1, p2);
+  assert.notEqual(p1, p3);
+
+  assert.equal(evaluatePassphraseStrength("short").valid, false);
+  assert.equal(evaluatePassphraseStrength("AbdoHub#2026").valid, true);
 });
+
+test("extractArticleSummary prefers abstract property and falls back to stripped first paragraph", () => {
+  const withAbstract = extractArticleSummary(
+    {
+      abstract: { en: "Concise **dataset** abstract.", ar: "ملخص **بيانات**." },
+      content: { en: "Body paragraph here.", ar: "فقرة." },
+    },
+    "en"
+  );
+  assert.deepEqual(withAbstract, { text: "Concise dataset abstract.", source: "abstract" });
+
+  const fromFirstPara = extractArticleSummary(
+    {
+      content: {
+        en: "## Heading\n\n[[embed:asset-pdf-brief]]\n\nFirst **key** insight from [the docs](https://example.com) with `code`.\n\nSecond paragraph.",
+        ar: "الفقرة الأولى هنا.",
+      },
+    },
+    "en"
+  );
+  assert.deepEqual(fromFirstPara, {
+    text: "First key insight from the docs with code.",
+    source: "excerpt",
+  });
+});
+
+test("extractTableOfContents extracts H2/H3 headings with deduplicated anchor IDs", () => {
+  const md = [
+    "## **System** Overview",
+    "",
+    "Some prose.",
+    "",
+    "### Data Pipeline",
+    "",
+    "```bash",
+    "## Not a heading inside code fence",
+    "```",
+    "",
+    "### Data Pipeline",
+  ].join("\n");
+
+  const toc = extractTableOfContents(md);
+  assert.deepEqual(toc, [
+    { id: "system-overview", level: 2, title: "System Overview" },
+    { id: "data-pipeline", level: 3, title: "Data Pipeline" },
+    { id: "data-pipeline-2", level: 3, title: "Data Pipeline" },
+  ]);
+});
+
+test("Journal Issues logic buckets Weekly/Monthly/Annual periods and filters by topic or manual list", () => {
+  assert.equal(getIsoWeekKey("2026-11-25"), "2026-W48");
+  assert.equal(getPeriodKeyForCadence("2026-11-25", "monthly"), "2026-11");
+  assert.equal(getPeriodKeyForCadence("2026-11-25", "annual"), "2026");
+
+  const arts: ArticleRecord[] = [
+    {
+      id: "a1",
+      slug: "a1",
+      type: "development-logs",
+      title: { en: "One", ar: "١" },
+      subtitle: { en: "", ar: "" },
+      content: { en: "word ".repeat(220), ar: "كلمة" },
+      publishedAt: "2026-11-25",
+      categories: ["development-logs"],
+      tags: ["architecture", "ci"],
+      readingTimeMinutes: 2,
+      featured: false,
+      createdAt: "",
+      updatedAt: "",
+      status: "published",
+      source: "manual",
+    },
+    {
+      id: "a2",
+      slug: "a2",
+      type: "articles",
+      title: { en: "Two", ar: "٢" },
+      subtitle: { en: "", ar: "" },
+      content: { en: "word ".repeat(50), ar: "كلمة" },
+      publishedAt: "2026-10-12",
+      categories: ["articles"],
+      tags: ["css"],
+      readingTimeMinutes: 1,
+      featured: false,
+      createdAt: "",
+      updatedAt: "",
+      status: "published",
+      source: "manual",
+    },
+  ];
+
+  const monthly = selectArticlesForIssue(arts, { cadence: "monthly", selectionMode: "period", periodKey: "2026-11" });
+  assert.deepEqual(monthly.map((a) => a.id), ["a1"]);
+
+  const byTopic = selectArticlesForIssue(arts, { cadence: "annual", selectionMode: "topic", periodKey: "2026", topics: ["architecture"] });
+  assert.deepEqual(byTopic.map((a) => a.id), ["a1"]);
+
+  const stats = calculateIssueStats(arts, "en");
+  assert.equal(stats.articleCount, 2);
+  assert.equal(stats.totalWords, 270);
+  assert.equal(stats.totalReadingMinutes, 3);
+});
+
+test("PDF Maker generates valid PDF 1.4 binary bytes and SEO Engine emits XML sitemap", () => {
+  const bytes = generatePdfBytes({
+    kicker: "ABDO HUB | EDITION 01",
+    title: "Zero-Backend Engineering Monograph",
+    subtitle: "Technical brief",
+    metadataLine: "By Abdo Kamel | 2026-11-25",
+    editorialNote: "Foreword paragraph summarizing this edition.",
+    sections: [
+      {
+        title: "Chapter One",
+        markdownContent: "## Section\n\nParagraph text with `inline` code.\n\n- Bullet one\n- Bullet two",
+        tags: ["architecture"],
+      },
+    ],
+  });
+  const text = new TextDecoder().decode(bytes);
+  assert.equal(text.startsWith("%PDF-1.4"), true);
+  assert.equal(text.includes("%%EOF"), true);
+  assert.equal(text.includes("Zero-Backend Engineering Monograph"), true);
+
+  const mockData = {
+    website: {
+      id: "w",
+      siteName: "ABDO — Personal Digital Hub & Intelligence",
+      shortTitle: "ABDO",
+      domain: "https://abdokamelayed.github.io",
+      defaultLanguage: "en",
+      supportedLanguages: ["en", "ar"],
+      defaultTheme: "light",
+      defaultGlassMode: false,
+      primaryAccent: "#0f172a",
+      secondaryAccent: "#2563eb",
+      seoDescription: { en: "Comprehensive developer portfolio and technical journal by Abdo Kamel covering software systems.", ar: "موقع ووصف تعريفي كامل باللغة العربية لتوثيق المشاريع والمقالات الهندسية." },
+      createdAt: "",
+      updatedAt: "2026-11-25",
+      status: "active",
+      source: "test",
+      version: "1.0.0",
+    },
+    profileSettings: {
+      id: "p",
+      fullName: { en: "Abdo Kamel", ar: "عبدو كامل" },
+      githubUsername: "AbdoKamelAyed",
+      avatarUrl: "/src/assets/images/author_abdo_portrait_1795606693025.jpg",
+      headline: { en: "Software Architect", ar: "مهندس" },
+      shortBio: { en: "Bio", ar: "نبذة" },
+      mission: { en: "", ar: "" },
+      careerDirection: { en: "", ar: "" },
+      technicalInterests: [],
+      selectedAchievements: [],
+      contact: { email: "", github: "", linkedin: "", website: "", otherLinks: [] },
+      createdAt: "",
+      updatedAt: "2026-11-25",
+      status: "active",
+      source: "test",
+    },
+    projects: [],
+    articles: [],
+    issues: [],
+  } as unknown as HubDatasets;
+
+  const audit = analyzeSeoAudit(mockData, "en");
+  assert.equal(audit.some((c) => c.id === "seo-canonical" && c.status === "pass"), true);
+  const xml = generateSitemapXml(mockData);
+  assert.equal(xml.includes("<urlset"), true);
+  assert.equal(generateRobotsTxt(mockData.website.domain).includes("Sitemap: https://abdokamelayed.github.io/sitemap.xml"), true);
+});
+
+
+

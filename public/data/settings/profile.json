@@ -2,6 +2,12 @@
   "id": "settings-profile",
   "fullName": { "en": "Abdo Kamel", "ar": "عبدو كامل" },
   "githubUsername": "AbdoKamelAyed",
+  "avatarUrl": "/src/assets/images/author_abdo_portrait_1795606693025.jpg",
+  "roleTitle": {
+    "en": "Founder of Suefco · Software & Systems Architect",
+    "ar": "مؤسس Suefco · مهندس برمجيات وأنظمة"
+  },
+  "location": { "en": "Egypt", "ar": "مصر" },
   "headline": {
     "en": "Software Builder, Industrial Systems & Digital Platforms",
     "ar": "مطور برمجيات وباني أنظمة صناعية ومنصات رقمية"

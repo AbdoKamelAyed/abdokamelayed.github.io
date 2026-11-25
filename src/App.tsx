@@ -1,7 +1,8 @@
 import React, { Component, useCallback, useEffect, useState } from "react";
 import type { HubDatasets, Lang } from "./types/hub";
 import { loadAllDatasets } from "./services/dataService";
-import { L, loc } from "./utils/i18n";
+import { L } from "./utils/i18n";
+import { applyPageSeoMetadata } from "./utils/seoEngine";
 import { Layout, type RouteSection } from "./components/Layout";
 import { HomePage } from "./pages/HomePage";
 import { ProjectsPage } from "./pages/ProjectsPage";
@@ -10,6 +11,7 @@ import { GithubPage } from "./pages/GithubPage";
 import { WorkPage } from "./pages/WorkPage";
 import { JournalPage } from "./pages/JournalPage";
 import { ArticleDetailPage } from "./pages/ArticleDetailPage";
+import { IssueDetailPage } from "./pages/IssueDetailPage";
 import { KnowledgePage } from "./pages/KnowledgePage";
 import { AboutPage } from "./pages/AboutPage";
 import { ContactPage } from "./pages/ContactPage";
@@ -62,7 +64,7 @@ class HubErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBou
   }
 }
 
-function parseHash(): { section: RouteSection; param: string | null } {
+function parseHash(): { section: RouteSection; param: string | null; subParam: string | null } {
   const raw = window.location.hash.replace(/^#\/?/, "");
   const parts = raw.split("/").filter(Boolean);
   const valid: RouteSection[] = ["home", "projects", "github", "work", "journal", "knowledge", "about", "contact", "admin"];
@@ -70,6 +72,7 @@ function parseHash(): { section: RouteSection; param: string | null } {
   return {
     section: valid.includes(candidate) ? candidate : "home",
     param: parts[1] || null,
+    subParam: parts[2] || null,
   };
 }
 
@@ -133,22 +136,7 @@ function AppContent() {
 
   useEffect(() => {
     if (!data) return;
-    const baseTitle = data.website.siteName || "ABDO — Personal Digital Hub";
-    let pageTitle = baseTitle;
-    if (route.section === "projects" && route.param) {
-      const p = data.projects.find((x) => x.slug === decodeURIComponent(route.param!) || x.id === route.param);
-      if (p) pageTitle = `${loc(p.name, lang)} — ${baseTitle}`;
-    } else if (route.section === "journal" && route.param) {
-      const a = data.articles.find((x) => x.slug === decodeURIComponent(route.param!) || x.id === route.param);
-      if (a) pageTitle = `${loc(a.title, lang)} — ${baseTitle}`;
-    } else if (route.section !== "home") {
-      pageTitle = `${route.section.toUpperCase()} — ${baseTitle}`;
-    }
-    document.title = pageTitle;
-
-    const desc = loc(data.website.seoDescription, lang);
-    const metaDesc = document.querySelector('meta[name="description"]');
-    if (metaDesc && desc) metaDesc.setAttribute("content", desc);
+    applyPageSeoMetadata(data, route, lang);
   }, [data, route, lang]);
 
   if (loadFailed) {
@@ -215,7 +203,11 @@ function AppContent() {
         {route.section === "github" && <GithubPage data={data} lang={lang} />}
         {route.section === "work" && <WorkPage data={data} lang={lang} />}
         {route.section === "journal" &&
-          (route.param ? (
+          (route.param === "issues" && route.subParam ? (
+            <IssueDetailPage data={data} slugOrId={route.subParam} lang={lang} />
+          ) : route.param === "issues" ? (
+            <JournalPage data={data} lang={lang} initialView="issues" />
+          ) : route.param ? (
             <ArticleDetailPage data={data} slugOrId={route.param} lang={lang} />
           ) : (
             <JournalPage data={data} lang={lang} />

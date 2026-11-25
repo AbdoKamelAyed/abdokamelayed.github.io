@@ -13,11 +13,22 @@
         "en": "Separating automated GitHub API pipelines from curated portfolio narratives.",
         "ar": "فصل خطوط جمع بيانات GitHub الآلية عن المحتوى التحريري المدار يدوياً."
       },
+      "abstract": {
+        "en": "Demonstrates how scheduled GitHub Actions pipelines collect and validate repository telemetry while keeping curated projects, articles, and knowledge records cleanly isolated in versioned JSON stores.",
+        "ar": "يستعرض كيف تجمع مهام GitHub Actions المجدولة بيانات المستودعات وتتحقق منها مع إبقاء المشاريع والمقالات وسجلات المعرفة المدارة يدوياً معزولة بأمان في ملفات JSON."
+      },
       "content": {
-        "en": "Static hosting does not have to mean static information.\n\nBy delegating API collection, normalization, and schema validation to scheduled GitHub Actions workflows, the frontend stays fast, resilient to API rate limits, and completely free of exposed credentials.\n\nManual project case studies, articles, and knowledge entries live in separate JSON stores so automated updates never overwrite human context. When a repository is synced, its raw telemetry enriches the portfolio view without altering curated descriptions or project status.",
-        "ar": "الاستضافة الثابتة لا تعني معلومات جامدة.\n\nمن خلال إسناد جمع البيانات والتحقق من بنيتها إلى GitHub Actions، تبقى الواجهة سريعة ومحمية من حدود الطلبات وخالية من أي مفاتيح سرية مكشوفة.\n\nتُحفظ دراسات الحالة والمقالات وإدخالات المعرفة في ملفات JSON منفصلة لضمان عدم استبدال السياق اليدوي أبداً أثناء المزامنة الآلية."
+        "en": "## Overview\n\nStatic hosting does not have to mean static information.\n\n[[embed:asset-image-issue-desk|Editorial Monograph Plate for Zero-Backend Publishing]]\n\n## Automated Pipeline Architecture\n\nBy delegating API collection, normalization, and schema validation to scheduled GitHub Actions workflows, the frontend stays fast, resilient to API rate limits, and completely free of exposed credentials.\n\n[[embed:asset-pdf-brief|Technical Architecture Reference Brief (PDF)]]\n\n### Isolation of Curated Records\n\nManual project case studies, articles, and knowledge entries live in separate JSON stores so automated updates never overwrite human context. When a repository is synced, its raw telemetry enriches the portfolio view without altering curated descriptions or project status.",
+        "ar": "## نظرة عامة\n\nالاستضافة الثابتة لا تعني معلومات جامدة.\n\n[[embed:asset-image-issue-desk|لوحة الإصدار الهندسي للنشر دون خادم خلفي]]\n\n## معمارية خط الأنابيب الآلي\n\nمن خلال إسناد جمع البيانات والتحقق من بنيتها إلى GitHub Actions، تبقى الواجهة سريعة ومحمية من حدود الطلبات وخالية من أي مفاتيح سرية مكشوفة.\n\n[[embed:asset-pdf-brief|الملخص المعماري المرجعي (PDF)]]\n\n### عزل السجلات المدارة يدوياً\n\nتُحفظ دراسات الحالة والمقالات وإدخالات المعرفة في ملفات JSON منفصلة لضمان عدم استبدال السياق اليدوي أبداً أثناء المزامنة الآلية."
       },
       "coverImage": "/src/assets/images/journal_editorial_cover_1795599465037.jpg",
+      "author": "Abdo Kamel",
+      "authorHandle": "@AbdoKamelAyed",
+      "authorAvatar": "/src/assets/images/author_abdo_portrait_1795606693025.jpg",
+      "authorBio": {
+        "en": "Founder of Suefco and systems builder focused on modular web platforms, automation pipelines, and bilingual developer tools.",
+        "ar": "مؤسس Suefco ومطور أنظمة يركز على المنصات المعيارية وخطوط الأتمتة والأدوات البرمجية ثنائية اللغة."
+      },
       "publishedAt": "2026-11-25",
       "categories": ["development-logs"],
       "tags": ["architecture", "github-actions", "github-pages"],
@@ -44,10 +55,13 @@
         "ar": "بناء خلاصات JSON ثابتة ومرنة مع تراجع آمن عند غياب توكن GraphQL."
       },
       "content": {
-        "en": "Public GitHub REST endpoints cover repositories, language byte breakdowns, release tags, and recent events without requiring personal tokens.\n\nWhen an optional metrics token is available in CI, a targeted GraphQL query enriches the archive with contribution calendar heatmaps and streak totals. When it is absent, the collector marks contribution calendars cleanly as unavailable rather than inventing estimates.\n\nKeeping collection and normalization in a standalone Node script guarantees reproducible JSON artifacts across local runs and GitHub Actions.",
-        "ar": "توفر واجهات GitHub REST العامة بيانات المستودعات وتوزيع اللغات والإصدارات والأحداث الأخيرة دون الحاجة إلى رموز وصول شخصية.\n\nوعند توفر رمز اختياري في بيئة التكامل المستمر، يضيف استعلام GraphQL تقويم المساهمات وسلاسل النشاط بدقة، بينما يتراجع النظام بأمان عند غيابه دون افتراض أرقام غير حقيقية.\n\nيساعد فصل الجمع والمعالجة في سكربت Node مستقل على ضمان مخرجات JSON موثوقة ومتسقة."
+        "en": "## Public REST Collection\n\nPublic GitHub REST endpoints cover repositories, language byte breakdowns, release tags, and recent events without requiring personal tokens.\n\n### GraphQL Enrichment and Fallback\n\nWhen an optional metrics token is available in CI, a targeted GraphQL query enriches the archive with contribution calendar heatmaps and streak totals. When it is absent, the collector marks contribution calendars cleanly as unavailable rather than inventing estimates.\n\n[[embed:asset-code-pipeline|Executable Schema Validation Module]]\n\n## Reproducible Artifacts\n\nKeeping collection and normalization in a standalone Node script guarantees reproducible JSON artifacts across local runs and GitHub Actions.",
+        "ar": "## الجمع عبر واجهة REST العامة\n\nتوفر واجهات GitHub REST العامة بيانات المستودعات وتوزيع اللغات والإصدارات والأحداث الأخيرة دون الحاجة إلى رموز وصول شخصية.\n\n### إثراء GraphQL والتراجع الآمن\n\nوعند توفر رمز اختياري في بيئة التكامل المستمر، يضيف استعلام GraphQL تقويم المساهمات وسلاسل النشاط بدقة، بينما يتراجع النظام بأمان عند غيابه دون افتراض أرقام غير حقيقية.\n\n[[embed:asset-code-pipeline|وحدة التحقق من مخطط البيانات]]\n\n## مخرجات قابلة للتكرار\n\nيساعد فصل الجمع والمعالجة في سكربت Node مستقل على ضمان مخرجات JSON موثوقة ومتسقة."
       },
       "coverImage": "/src/assets/images/project_systems_architecture_1795599465444.jpg",
+      "author": "Abdo Kamel",
+      "authorHandle": "@AbdoKamelAyed",
+      "authorAvatar": "/src/assets/images/author_abdo_portrait_1795606693025.jpg",
       "publishedAt": "2026-11-22",
       "categories": ["technical-notes", "development-logs"],
       "tags": ["github-actions", "architecture", "automation"],

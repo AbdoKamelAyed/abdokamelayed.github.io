@@ -1,16 +1,47 @@
 export type ContentBlock =
-  | { type: "h2"; text: string }
-  | { type: "h3"; text: string }
+  | { type: "h2"; text: string; id: string }
+  | { type: "h3"; text: string; id: string }
   | { type: "blockquote"; text: string }
   | { type: "code"; lang: string; code: string }
   | { type: "ul"; items: string[] }
+  | { type: "img"; alt: string; src: string }
+  | { type: "embed"; assetId: string; caption?: string }
   | { type: "p"; text: string };
+
+export interface TocItem {
+  id: string;
+  level: 2 | 3;
+  title: string;
+}
+
+const EMBED_LINE_RE = /^\[\[embed:([a-zA-Z0-9_-]+)(?:\|([^\]]+))?\]\]$/;
+
+function headingPlainText(raw: string): string {
+  return tokenizeInlineMarkdown(raw)
+    .map((t) => t.text)
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function makeUniqueHeadingId(raw: string, used: Map<string, number>, fallbackIndex: number): string {
+  const plain = headingPlainText(raw)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0600-\u06FF]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const base = plain || `section-${fallbackIndex}`;
+  const seen = used.get(base) || 0;
+  used.set(base, seen + 1);
+  return seen === 0 ? base : `${base}-${seen + 1}`;
+}
 
 export function parseMarkdownBlocks(raw: string): ContentBlock[] {
   if (!raw || !raw.trim()) return [];
   const normalized = raw.replace(/\r\n/g, "\n");
   const blocks: ContentBlock[] = [];
   const lines = normalized.split("\n");
+  const usedIds = new Map<string, number>();
+  let headingCounter = 0;
   let i = 0;
 
   while (i < lines.length) {
@@ -36,13 +67,17 @@ export function parseMarkdownBlocks(raw: string): ContentBlock[] {
     }
 
     if (trimmed.startsWith("### ")) {
-      blocks.push({ type: "h3", text: trimmed.slice(4).trim() });
+      const text = trimmed.slice(4).trim();
+      headingCounter += 1;
+      blocks.push({ type: "h3", text, id: makeUniqueHeadingId(text, usedIds, headingCounter) });
       i += 1;
       continue;
     }
 
     if (trimmed.startsWith("## ")) {
-      blocks.push({ type: "h2", text: trimmed.slice(3).trim() });
+      const text = trimmed.slice(3).trim();
+      headingCounter += 1;
+      blocks.push({ type: "h2", text, id: makeUniqueHeadingId(text, usedIds, headingCounter) });
       i += 1;
       continue;
     }
@@ -70,6 +105,24 @@ export function parseMarkdownBlocks(raw: string): ContentBlock[] {
       continue;
     }
 
+    const embedMatch = trimmed.match(EMBED_LINE_RE);
+    if (embedMatch) {
+      blocks.push({
+        type: "embed",
+        assetId: embedMatch[1].trim(),
+        caption: embedMatch[2]?.trim() || undefined,
+      });
+      i += 1;
+      continue;
+    }
+
+    const imgMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
+    if (imgMatch) {
+      blocks.push({ type: "img", alt: imgMatch[1].trim(), src: imgMatch[2].trim() });
+      i += 1;
+      continue;
+    }
+
     const paraLines: string[] = [];
     while (
       i < lines.length &&
@@ -79,7 +132,9 @@ export function parseMarkdownBlocks(raw: string): ContentBlock[] {
       !lines[i].trim().startsWith("### ") &&
       !lines[i].trim().startsWith("> ") &&
       !lines[i].trim().startsWith("- ") &&
-      !lines[i].trim().startsWith("* ")
+      !lines[i].trim().startsWith("* ") &&
+      !EMBED_LINE_RE.test(lines[i].trim()) &&
+      !/^!\[([^\]]*)\]\(([^)\s]+)\)$/.test(lines[i].trim())
     ) {
       paraLines.push(lines[i].trim());
       i += 1;
@@ -128,4 +183,22 @@ export function tokenizeInlineMarkdown(text: string): InlineToken[] {
     tokens.push({ type: "text", text: text.slice(lastIndex) });
   }
   return tokens;
+}
+
+export function extractTableOfContents(raw: string): TocItem[] {
+  const blocks = parseMarkdownBlocks(raw);
+  const items: TocItem[] = [];
+  for (const block of blocks) {
+    if (block.type === "h2" || block.type === "h3") {
+      const title = headingPlainText(block.text);
+      if (title) {
+        items.push({
+          id: block.id,
+          level: block.type === "h2" ? 2 : 3,
+          title,
+        });
+      }
+    }
+  }
+  return items;
 }

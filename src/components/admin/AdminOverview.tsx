@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Activity, BookOpen, CheckCircle2, Download, FolderGit2, PenSquare, RotateCcw, Settings2 } from "lucide-react";
+import { Activity, BookMarked, BookOpen, CheckCircle2, Download, FolderGit2, Layers, PenSquare, RotateCcw, Settings2 } from "lucide-react";
 import type { HubDatasets, Lang } from "../../types/hub";
 import { clearLocalDrafts, getLocalDraftCount } from "../../services/dataService";
 import type { AdminAuditEntry } from "../../utils/adminAuth";
@@ -10,7 +10,9 @@ export const AdminOverview: React.FC<{
   data: HubDatasets;
   lang: Lang;
   auditLog: AdminAuditEntry[];
-  onNavigateTab: (tab: "overview" | "projects" | "editor" | "knowledge" | "github" | "settings") => void;
+  onNavigateTab: (
+    tab: "overview" | "projects" | "editor" | "media" | "issues" | "knowledge" | "github" | "settings"
+  ) => void;
   onReloadFromSource: () => Promise<void>;
   onNotify: (msg: string) => void;
   onExportBundle: () => void;
@@ -92,10 +94,12 @@ export const AdminOverview: React.FC<{
         </div>
 
         <div className="rounded-xl border border-[var(--hub-border)] hub-surface p-4">
-          <div className="text-xs text-[var(--hub-text-muted)]">{L("Knowledge Base", "قاعدة المعرفة", lang)}</div>
-          <div className="mt-1 text-2xl font-bold font-mono tabular-nums">{data.allKnowledgeRaw.length}</div>
+          <div className="text-xs text-[var(--hub-text-muted)]">{L("Issues & Media", "الأعداد والوسائط", lang)}</div>
+          <div className="mt-1 text-2xl font-bold font-mono tabular-nums">
+            {data.issues.length} / {data.mediaAssets.length}
+          </div>
           <div className="text-[11px] text-[var(--hub-text-muted)] mt-0.5 tabular-nums">
-            {data.experience.items.length} {L("roles", "خبرات", lang)}
+            {data.allKnowledgeRaw.length} {L("knowledge", "معرفة", lang)}
           </div>
         </div>
 
@@ -135,11 +139,27 @@ export const AdminOverview: React.FC<{
           </button>
           <button
             type="button"
+            onClick={() => onNavigateTab("media")}
+            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>{L("Media Library", "مكتبة الوسائط", lang)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigateTab("issues")}
+            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <BookMarked className="w-3.5 h-3.5" />
+            <span>{L("Issues & PDF Maker", "الأعداد وصانع PDF", lang)}</span>
+          </button>
+          <button
+            type="button"
             onClick={() => onNavigateTab("projects")}
             className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
           >
             <FolderGit2 className="w-3.5 h-3.5" />
-            <span>{L("Manage Projects", "إدارة المشاريع", lang)}</span>
+            <span>{L("Projects", "المشاريع", lang)}</span>
           </button>
           <button
             type="button"
@@ -147,7 +167,7 @@ export const AdminOverview: React.FC<{
             className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
           >
             <Settings2 className="w-3.5 h-3.5" />
-            <span>{L("Site Settings", "إعدادات الموقع", lang)}</span>
+            <span>{L("SEO & Settings", "SEO والإعدادات", lang)}</span>
           </button>
           <button
             type="button"

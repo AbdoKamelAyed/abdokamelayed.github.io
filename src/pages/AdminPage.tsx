@@ -17,17 +17,21 @@ import {
   clearAdminSession,
   getActiveAdminSession,
   getAuditLog,
+  touchAdminSession,
   type AdminAuditEntry,
   type AdminSessionRecord,
 } from "../utils/adminAuth";
 import { slugify, validateCollectionSchema } from "../utils/analytics";
 import { formatDateTime, L, loc, t } from "../utils/i18n";
+import { AuthorAvatar } from "../components/AuthorProfileCard";
 import { AdminLoginGate } from "../components/admin/AdminLoginGate";
 import { AdminOverview } from "../components/admin/AdminOverview";
 import { ArticleRichEditor } from "../components/admin/ArticleRichEditor";
+import { IssueBuilderPanel } from "../components/admin/IssueBuilderPanel";
+import { MediaLibraryPanel } from "../components/admin/MediaLibraryPanel";
 import { SiteSettingsPanel } from "../components/admin/SiteSettingsPanel";
 
-type AdminTab = "overview" | "editor" | "projects" | "knowledge" | "github" | "settings";
+type AdminTab = "overview" | "editor" | "media" | "issues" | "projects" | "knowledge" | "github" | "settings";
 
 const PROJECT_STATUSES: ProjectStatus[] = [
   "Planning",
@@ -96,7 +100,13 @@ export const AdminPage: React.FC<{
   const [featuredInput, setFeaturedInput] = useState(data.githubSyncSettings.featuredRepos.join(", "));
 
   const recordAudit = (action: string, target: string) => {
-    const next = appendAuditEntry(action, target, session?.username || "admin");
+    const refreshed = touchAdminSession();
+    if (!refreshed) {
+      setSession(null);
+      return;
+    }
+    setSession(refreshed);
+    const next = appendAuditEntry(action, target, refreshed.username);
     setAuditLog(next);
   };
 
@@ -105,9 +115,10 @@ export const AdminPage: React.FC<{
       <AdminLoginGate
         lang={lang}
         defaultUsername={data.profileSettings.githubUsername || "AbdoKamelAyed"}
+        defaultAvatarUrl={data.profileSettings.avatarUrl}
         onAuthenticated={(newSession) => {
           setSession(newSession);
-          const next = appendAuditEntry("Signed In", "Admin Portal", newSession.username);
+          const next = appendAuditEntry("Signed In", `Admin Portal (${newSession.role})`, newSession.username);
           setAuditLog(next);
         }}
       />
@@ -296,15 +307,22 @@ export const AdminPage: React.FC<{
   return (
     <div className="space-y-8">
       <header className="border-b border-[var(--hub-border)] pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400">
-            <ShieldCheck className="w-4 h-4" />
-            <span>
-              {L("Authenticated Operator:", "المسؤول النشط:", lang)} {session.username} ·{" "}
-              {L("Session expires", "تنتهي الجلسة", lang)} {formatDateTime(session.expiresAt, lang)}
-            </span>
+        <div className="flex items-center gap-4">
+          <AuthorAvatar
+            src={session.avatarUrl || data.profileSettings.avatarUrl}
+            name={session.displayName || session.username}
+            sizeClass="w-12 h-12"
+          />
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>
+                {session.displayName || session.username} ({session.role}) ·{" "}
+                {L("Session expires", "تنتهي الجلسة", lang)} {formatDateTime(session.expiresAt, lang)}
+              </span>
+            </div>
+            <h1 className="font-display text-3xl font-bold tracking-tight">{t("admin.title", lang)}</h1>
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">{t("admin.title", lang)}</h1>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -327,16 +345,26 @@ export const AdminPage: React.FC<{
           [
             ["overview", L("Command Dashboard", "لوحة التحكم", lang)],
             ["editor", L("Rich Article Editor", "المحرر المتقدم", lang)],
+            ["media", L("Media Library", "مكتبة الوسائط", lang)],
+            ["issues", L("Issues & PDF Maker", "الأعداد وصانع PDF", lang)],
             ["projects", L("Projects", "المشاريع", lang)],
             ["knowledge", L("Knowledge & Work", "المعرفة والخبرات", lang)],
             ["github", L("GitHub Sync", "مزامنة GitHub", lang)],
-            ["settings", L("Site Settings", "إعدادات الموقع", lang)],
+            ["settings", L("SEO & Site Settings", "SEO والإعدادات", lang)],
           ] as [AdminTab, string][]
         ).map(([id, label]) => (
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => {
+              const refreshed = touchAdminSession();
+              if (!refreshed) {
+                setSession(null);
+                return;
+              }
+              setSession(refreshed);
+              setTab(id);
+            }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer whitespace-nowrap ${
               tab === id
                 ? "bg-[var(--hub-primary)] text-[var(--hub-bg)]"
@@ -373,6 +401,8 @@ export const AdminPage: React.FC<{
               githubSyncSettings: data.githubSyncSettings,
               projects: data.projects,
               articles: data.allArticlesRaw,
+              issues: data.allIssuesRaw,
+              mediaAssets: data.mediaAssets,
               knowledge: data.allKnowledgeRaw,
               experience: data.experience,
             });
@@ -386,6 +416,28 @@ export const AdminPage: React.FC<{
           data={data}
           lang={lang}
           adminUsername={session.username}
+          onUpdateData={onUpdateData}
+          onNotify={setStatusBanner}
+          onAudit={recordAudit}
+          onDownloadJson={downloadJson}
+        />
+      )}
+
+      {tab === "media" && (
+        <MediaLibraryPanel
+          data={data}
+          lang={lang}
+          onUpdateData={onUpdateData}
+          onNotify={setStatusBanner}
+          onAudit={recordAudit}
+          onDownloadJson={downloadJson}
+        />
+      )}
+
+      {tab === "issues" && (
+        <IssueBuilderPanel
+          data={data}
+          lang={lang}
           onUpdateData={onUpdateData}
           onNotify={setStatusBanner}
           onAudit={recordAudit}

@@ -238,16 +238,64 @@ export interface ArticleRecord {
   type: string;
   title: LocalizedText;
   subtitle: LocalizedText;
+  abstract?: LocalizedText;
   content: LocalizedText;
   coverImage?: string;
   author?: string;
   authorHandle?: string;
+  authorAvatar?: string;
+  authorBio?: LocalizedText;
   publishedAt: string;
   categories: string[];
   tags: string[];
   readingTimeMinutes: number;
   featured: boolean;
-  seo?: { description?: string };
+  seo?: { description?: string; keywords?: string[] };
+  createdAt: string;
+  updatedAt: string;
+  status: "published" | "draft";
+  source: string;
+}
+
+export type MediaAssetType = "pdf" | "image" | "video" | "code" | "audio";
+
+export interface MediaAssetRecord {
+  id: string;
+  title: LocalizedText;
+  mediaType: MediaAssetType;
+  mimeType: string;
+  url: string;
+  storageMode: "url" | "indexeddb" | "inline-code";
+  codeContent?: string;
+  codeLanguage?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  caption?: LocalizedText;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  status: "published" | "draft";
+  source: string;
+}
+
+export type JournalIssueCadence = "weekly" | "monthly" | "annual" | "curated";
+export type JournalIssueSelectionMode = "manual" | "topic" | "period";
+
+export interface JournalIssueRecord {
+  id: string;
+  slug: string;
+  issueNumber: string;
+  cadence: JournalIssueCadence;
+  selectionMode: JournalIssueSelectionMode;
+  periodKey: string;
+  topics: string[];
+  title: LocalizedText;
+  subtitle: LocalizedText;
+  editorialNote?: LocalizedText;
+  coverImage?: string;
+  articleIds: string[];
+  publishedAt: string;
+  featured: boolean;
   createdAt: string;
   updatedAt: string;
   status: "published" | "draft";
@@ -274,6 +322,9 @@ export interface ProfileSettings {
   id: string;
   fullName: LocalizedText;
   githubUsername: string;
+  avatarUrl?: string;
+  roleTitle?: LocalizedText;
+  location?: LocalizedText;
   headline: LocalizedText;
   shortBio: LocalizedText;
   mission: LocalizedText;
@@ -299,6 +350,9 @@ export interface WebsiteSettings {
   shortTitle: string;
   domain: string;
   defaultAuthor?: string;
+  ogImage?: string;
+  twitterHandle?: string;
+  seoKeywords?: string[];
   defaultLanguage: Lang;
   supportedLanguages: Lang[];
   defaultTheme: "light" | "dark";
@@ -347,6 +401,9 @@ export interface HubDatasets {
   articles: ArticleRecord[];
   allArticlesRaw: ArticleRecord[];
   journalCategories: CategoryRecord[];
+  issues: JournalIssueRecord[];
+  allIssuesRaw: JournalIssueRecord[];
+  mediaAssets: MediaAssetRecord[];
   knowledge: KnowledgeEntry[];
   allKnowledgeRaw: KnowledgeEntry[];
   knowledgeCategories: CategoryRecord[];

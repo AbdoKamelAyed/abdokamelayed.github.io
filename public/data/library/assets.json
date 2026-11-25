@@ -1,0 +1,77 @@
+{
+  "id": "media-library-collection",
+  "items": [
+    {
+      "id": "asset-code-pipeline",
+      "title": {
+        "en": "Schema Validation Gate Script (validate-schemas.mjs)",
+        "ar": "سكربت التحقق من مخططات البيانات (validate-schemas.mjs)"
+      },
+      "mediaType": "code",
+      "mimeType": "text/javascript",
+      "url": "",
+      "storageMode": "inline-code",
+      "codeLanguage": "javascript",
+      "fileName": "validate-schemas.mjs",
+      "sizeBytes": 1120,
+      "codeContent": "const REQUIRED_BASE_KEYS = [\"id\", \"createdAt\", \"updatedAt\", \"status\", \"source\"];\n\nexport function validateCollection(collection) {\n  const errors = [];\n  const seenIds = new Set();\n  for (const item of collection.items || []) {\n    for (const key of REQUIRED_BASE_KEYS) {\n      if (!item[key]) errors.push(`Missing ${key} on ${item.id || \"record\"}`);\n    }\n    if (item.id && seenIds.has(item.id)) {\n      errors.push(`Duplicate ID detected: ${item.id}`);\n    }\n    if (item.id) seenIds.add(item.id);\n  }\n  return { valid: errors.length === 0, errors };\n}",
+      "caption": {
+        "en": "Embedded executable check validating dataset integrity before static deployment.",
+        "ar": "فحص برمجي مضمن للتحقق من سلامة مجموعات البيانات قبل النشر الثابت."
+      },
+      "tags": ["architecture", "ci", "validation"],
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "media-library"
+    },
+    {
+      "id": "asset-image-issue-desk",
+      "title": {
+        "en": "Editorial Monograph Edition Plate",
+        "ar": "لوحة إصدار المجلة الهندسية"
+      },
+      "mediaType": "image",
+      "mimeType": "image/jpeg",
+      "url": "/src/assets/images/journal_issue_cover_1795606693391.jpg",
+      "storageMode": "url",
+      "fileName": "journal-issue-edition.jpg",
+      "sizeBytes": 184320,
+      "caption": {
+        "en": "Bound architectural monograph prepared for periodic digital and PDF issue publishing.",
+        "ar": "نموذج إصدار المجلة التقنية المجهز للنشر الدوري والتصدير بصيغة PDF."
+      },
+      "tags": ["editorial", "design", "issues"],
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "media-library"
+    },
+    {
+      "id": "asset-pdf-brief",
+      "title": {
+        "en": "ABDO Hub Architecture Technical Brief (PDF)",
+        "ar": "الملخص المعماري لمنصة ABDO (PDF)"
+      },
+      "mediaType": "pdf",
+      "mimeType": "application/pdf",
+      "url": "./media/abdo-hub-architecture-brief.pdf",
+      "storageMode": "url",
+      "fileName": "abdo-hub-architecture-brief.pdf",
+      "sizeBytes": 1680,
+      "caption": {
+        "en": "Downloadable reference brief outlining zero-backend telemetry, bilingual UI, and static JSON storage.",
+        "ar": "ملف مرجعي قابل للتحميل يوضح بنية القياس البرمجي والواجهة ثنائية اللغة."
+      },
+      "tags": ["pdf", "architecture", "brief"],
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "media-library"
+    }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "media-library"
+}

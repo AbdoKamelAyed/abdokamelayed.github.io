@@ -1,0 +1,108 @@
+{
+  "id": "journal-issues-collection",
+  "items": [
+    {
+      "id": "issue-2026-annual-architecture",
+      "slug": "2026-annual-systems-edition",
+      "issueNumber": "ED. 01 · ANNUAL",
+      "cadence": "annual",
+      "selectionMode": "period",
+      "periodKey": "2026",
+      "topics": ["architecture", "github-actions", "typescript"],
+      "title": {
+        "en": "2026 Annual Compendium: Zero-Backend Architecture & Telemetry",
+        "ar": "الإصدار السنوي 2026: المعمارية دون خادم خلفي والقياس البرمجي"
+      },
+      "subtitle": {
+        "en": "Complete annual monograph collecting core essays on CI/CD pipelines, strict JSON schema validation, and bilingual LTR/RTL engineering.",
+        "ar": "تجميع سنوي شامل يضم المقالات المحورية حول خطوط التكامل المستمر والتحقق الصارم من البيانات وتصميم الواجهات ثنائية اللغة."
+      },
+      "editorialNote": {
+        "en": "This inaugural annual edition brings together the foundational engineering records behind ABDO Personal Digital Hub—documenting how static architecture achieves high-reliability telemetry without fragile runtime secrets.",
+        "ar": "يجمع هذا العدد السنوي الافتتاحي السجلات الهندسية التأسيسية لمنصة ABDO الرقمية، موثقاً كيفية بناء أرشيف تقني موثوق دون خوادم معقدة."
+      },
+      "coverImage": "/src/assets/images/journal_issue_cover_1795606693391.jpg",
+      "articleIds": [
+        "art-architecture-digital-hub",
+        "art-github-actions-telemetry-pipeline",
+        "art-schema-validation-static-hubs",
+        "art-bilingual-rtl-engineering-systems"
+      ],
+      "publishedAt": "2026-11-25",
+      "featured": true,
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "manual-editorial"
+    },
+    {
+      "id": "issue-2026-11-monthly",
+      "slug": "november-2026-pipeline-digest",
+      "issueNumber": "ED. 02 · MONTHLY",
+      "cadence": "monthly",
+      "selectionMode": "period",
+      "periodKey": "2026-11",
+      "topics": ["github-actions", "github-pages"],
+      "title": {
+        "en": "November 2026 Digest: Automation & Static Hub Resilience",
+        "ar": "نشرة نوفمبر 2026: الأتمتة ومرونة المنصات الثابتة"
+      },
+      "subtitle": {
+        "en": "Monthly roundup of November 2026 publications covering REST/GraphQL normalization, static publishing, and bilingual layouts.",
+        "ar": "حصاد شهر نوفمبر 2026 للمقالات التقنية حول توحيد بيانات GitHub والنشر الثابت والواجهات ثنائية اللغة."
+      },
+      "editorialNote": {
+        "en": "Prepared for offline review and PDF distribution, this monthly issue collects every article shipped during November 2026.",
+        "ar": "أُعد هذا العدد الشهري للمطالعة والتصدير بصيغة PDF ويضم كافة المقالات المنشورة خلال نوفمبر 2026."
+      },
+      "coverImage": "/src/assets/images/abdo_editorial_workspace_1795599463678.jpg",
+      "articleIds": [
+        "art-architecture-digital-hub",
+        "art-github-actions-telemetry-pipeline",
+        "art-schema-validation-static-hubs"
+      ],
+      "publishedAt": "2026-11-25",
+      "featured": true,
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "manual-editorial"
+    },
+    {
+      "id": "issue-2026-w48-weekly",
+      "slug": "week-48-2026-architecture-focus",
+      "issueNumber": "ED. 03 · WEEKLY",
+      "cadence": "weekly",
+      "selectionMode": "topic",
+      "periodKey": "2026-W48",
+      "topics": ["architecture"],
+      "title": {
+        "en": "Week 48 Spotlight: Modular Architecture by Topic",
+        "ar": "عدد الأسبوع 48: المعمارية المعيارية حسب الموضوع"
+      },
+      "subtitle": {
+        "en": "Focused weekly briefing filtering architecture-tagged engineering logs ready for team handoff and PDF export.",
+        "ar": "نشرة أسبوعية مركزة تجمع المقالات المصنفة تحت وسم المعمارية والجاهزة للمشاركة وتصدير PDF."
+      },
+      "editorialNote": {
+        "en": "Curated automatically from entries carrying the #architecture topic tag across development logs and technical notes.",
+        "ar": "مُجمّعة حسب الموضوع من الإدخالات الموسومة بـ #architecture عبر سجلات التطوير والملاحظات التقنية."
+      },
+      "coverImage": "/src/assets/images/project_systems_architecture_1795599465444.jpg",
+      "articleIds": [
+        "art-architecture-digital-hub",
+        "art-github-actions-telemetry-pipeline"
+      ],
+      "publishedAt": "2026-11-25",
+      "featured": false,
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "manual-editorial"
+    }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-editorial"
+}

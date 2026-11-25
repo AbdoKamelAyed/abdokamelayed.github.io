@@ -88,6 +88,8 @@ export async function loadAllDatasets(): Promise<HubDatasets> {
     experience,
     articles,
     journalCategories,
+    issuesData,
+    mediaLibraryData,
     knowledge,
     knowledgeCategories,
   ] = await Promise.all([
@@ -113,6 +115,7 @@ export async function loadAllDatasets(): Promise<HubDatasets> {
       id: "settings-profile",
       fullName: { en: "Abdo Kamel", ar: "عبدو كامل" },
       githubUsername: "AbdoKamelAyed",
+      avatarUrl: "/src/assets/images/author_abdo_portrait_1795606693025.jpg",
       headline: { en: "", ar: "" },
       shortBio: { en: "", ar: "" },
       mission: { en: "", ar: "" },
@@ -214,11 +217,14 @@ export async function loadAllDatasets(): Promise<HubDatasets> {
     }),
     fetchJsonWithCache<{ items: HubDatasets["allArticlesRaw"] }>("./data/journal/articles.json", { items: [] }),
     fetchJsonWithCache<{ items: HubDatasets["journalCategories"] }>("./data/journal/categories.json", { items: [] }),
+    fetchJsonWithCache<{ items: HubDatasets["allIssuesRaw"] }>("./data/journal/issues.json", { items: [] }),
+    fetchJsonWithCache<{ items: HubDatasets["mediaAssets"] }>("./data/library/assets.json", { items: [] }),
     fetchJsonWithCache<{ items: HubDatasets["allKnowledgeRaw"] }>("./data/knowledge/entries.json", { items: [] }),
     fetchJsonWithCache<{ items: HubDatasets["knowledgeCategories"] }>("./data/knowledge/categories.json", { items: [] }),
   ]);
 
   const rawArticles = articles.items || [];
+  const rawIssues = issuesData.items || [];
   const rawKnowledge = knowledge.items || [];
 
   return {
@@ -242,6 +248,9 @@ export async function loadAllDatasets(): Promise<HubDatasets> {
     articles: rawArticles.filter((a) => a.status === "published"),
     allArticlesRaw: rawArticles,
     journalCategories: journalCategories.items || [],
+    issues: rawIssues.filter((i) => i.status === "published"),
+    allIssuesRaw: rawIssues,
+    mediaAssets: mediaLibraryData.items || [],
     knowledge: rawKnowledge.filter((k) => k.status === "published"),
     allKnowledgeRaw: rawKnowledge,
     knowledgeCategories: knowledgeCategories.items || [],

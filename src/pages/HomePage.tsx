@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import type { HubDatasets, Lang } from "../types/hub";
 import { safeUrl } from "../utils/analytics";
 import { formatDate, L, loc, t } from "../utils/i18n";
+import { AuthorAvatar } from "../components/AuthorProfileCard";
 import { ArticleCard, ProjectCard } from "../components/Cards";
 
 export const HomePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, lang }) => {
@@ -24,13 +25,16 @@ export const HomePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
         <div className="lg:col-span-7 flex flex-col justify-between gap-6 py-2">
           <div className="space-y-4">
-            <p className="text-xs font-mono tracking-wide text-[var(--hub-text-muted)] flex flex-wrap items-center gap-2">
-              <span dir="ltr">@{p.githubUsername || "AbdoKamelAyed"}</span>
-              <span aria-hidden="true">·</span>
-              <span>{gh.profile.location || L("Egypt", "مصر", lang)}</span>
-              <span aria-hidden="true">·</span>
-              <span>{gh.profile.company || "Suefco"}</span>
-            </p>
+            <div className="flex items-center gap-3">
+              <AuthorAvatar src={p.avatarUrl} name={loc(p.fullName, lang)} sizeClass="w-12 h-12" />
+              <p className="text-xs font-mono tracking-wide text-[var(--hub-text-muted)] flex flex-wrap items-center gap-2">
+                <span dir="ltr">@{p.githubUsername || "AbdoKamelAyed"}</span>
+                <span aria-hidden="true">·</span>
+                <span>{gh.profile.location || loc(p.location, lang) || L("Egypt", "مصر", lang)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{gh.profile.company || "Suefco"}</span>
+              </p>
+            </div>
             <h1 className="font-display text-3xl sm:text-5xl font-bold tracking-tight leading-[1.12]">
               {loc(p.fullName, lang)} — {loc(p.headline, lang)}
             </h1>
