@@ -1,7 +1,7 @@
 import React from "react";
 import { ArrowUpRight } from "lucide-react";
 import type { ArticleRecord, GitHubRepo, Lang, ProjectRecord } from "../types/hub";
-import { safeUrl } from "../utils/analytics";
+import { calculateReadingTimeMinutes, safeUrl } from "../utils/analytics";
 import { formatDate, L, loc, t } from "../utils/i18n";
 
 export const ProjectCard: React.FC<{
@@ -85,6 +85,7 @@ export const ArticleCard: React.FC<{
 }> = ({ article, lang }) => {
   const href = `#/journal/${encodeURIComponent(article.slug || article.id)}`;
   const cover = safeUrl(article.coverImage);
+  const readingMinutes = calculateReadingTimeMinutes(loc(article.content, lang));
 
   return (
     <article className="rounded-2xl border border-[var(--hub-border)] hub-surface overflow-hidden flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5">
@@ -108,7 +109,7 @@ export const ArticleCard: React.FC<{
             <span className="tabular-nums">{formatDate(article.publishedAt, lang)}</span>
             <span aria-hidden="true">·</span>
             <span className="tabular-nums">
-              {article.readingTimeMinutes || 1} {L("min read", "دقيقة قراءة", lang)}
+              {readingMinutes} {L("min read", "دقيقة قراءة", lang)}
             </span>
           </div>
 

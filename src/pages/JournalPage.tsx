@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import type { HubDatasets, Lang } from "../types/hub";
-import { groupArticlesByMonth } from "../utils/analytics";
+import { calculateReadingTimeMinutes, groupArticlesByMonth } from "../utils/analytics";
 import { formatDate, L, loc, t } from "../utils/i18n";
 import { ArticleCard } from "../components/Cards";
 
@@ -118,8 +118,8 @@ export const JournalPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data,
                     <a href={`#/journal/${encodeURIComponent(art.slug || art.id)}`} className="font-semibold hover:underline">
                       {loc(art.title, lang)}
                     </a>
-                    <span className="text-xs font-mono text-[var(--hub-text-muted)]">
-                      {art.type} · {formatDate(art.publishedAt, lang)}
+                    <span className="text-xs font-mono tabular-nums text-[var(--hub-text-muted)]">
+                      {art.type} · {formatDate(art.publishedAt, lang)} · {calculateReadingTimeMinutes(loc(art.content, lang))} {L("min read", "دقيقة قراءة", lang)}
                     </span>
                   </li>
                 ))}

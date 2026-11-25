@@ -19,6 +19,22 @@ const LANG_KEY = "abdo_hub_lang";
 const THEME_KEY = "abdo_hub_theme";
 const GLASS_KEY = "abdo_hub_glass";
 
+function safeStorageGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore restricted localStorage
+  }
+}
+
 interface ErrorBoundaryState {
   hasError: boolean;
 }
@@ -57,12 +73,13 @@ function parseHash(): { section: RouteSection; param: string | null } {
   };
 }
 
-export default function App() {
+function AppContent() {
   const [data, setData] = useState<HubDatasets | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [route, setRoute] = useState(parseHash);
-  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem(LANG_KEY) === "ar" ? "ar" : "en"));
-  const [theme, setTheme] = useState<"light" | "dark">(() => (localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"));
-  const [glass, setGlass] = useState<boolean>(() => localStorage.getItem(GLASS_KEY) === "true");
+  const [lang, setLang] = useState<Lang>(() => (safeStorageGet(LANG_KEY) === "ar" ? "ar" : "en"));
+  const [theme, setTheme] = useState<"light" | "dark">(() => (safeStorageGet(THEME_KEY) === "dark" ? "dark" : "light"));
+  const [glass, setGlass] = useState<boolean>(() => safeStorageGet(GLASS_KEY) === "true");
 
   const applyThemeVars = useCallback(
     (nextTheme: "light" | "dark", nextGlass: boolean, website?: HubDatasets["website"]) => {
@@ -76,14 +93,19 @@ export default function App() {
   );
 
   const fetchDatasets = useCallback(async () => {
-    const loaded = await loadAllDatasets();
-    setData(loaded);
-    const initialTheme = (localStorage.getItem(THEME_KEY) as "light" | "dark" | null) || loaded.website.defaultTheme || "light";
-    const storedGlass = localStorage.getItem(GLASS_KEY);
-    const initialGlass = storedGlass !== null ? storedGlass === "true" : Boolean(loaded.website.defaultGlassMode);
-    setTheme(initialTheme);
-    setGlass(initialGlass);
-    applyThemeVars(initialTheme, initialGlass, loaded.website);
+    try {
+      setLoadFailed(false);
+      const loaded = await loadAllDatasets();
+      setData(loaded);
+      const initialTheme = (safeStorageGet(THEME_KEY) as "light" | "dark" | null) || loaded.website.defaultTheme || "light";
+      const storedGlass = safeStorageGet(GLASS_KEY);
+      const initialGlass = storedGlass !== null ? storedGlass === "true" : Boolean(loaded.website.defaultGlassMode);
+      setTheme(initialTheme);
+      setGlass(initialGlass);
+      applyThemeVars(initialTheme, initialGlass, loaded.website);
+    } catch {
+      setLoadFailed(true);
+    }
   }, [applyThemeVars]);
 
   useEffect(() => {
@@ -93,7 +115,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
-    localStorage.setItem(LANG_KEY, lang);
+    safeStorageSet(LANG_KEY, lang);
   }, [lang]);
 
   useEffect(() => {
@@ -129,6 +151,24 @@ export default function App() {
     if (metaDesc && desc) metaDesc.setAttribute("content", desc);
   }, [data, route, lang]);
 
+  if (loadFailed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-3">
+          <h1 className="text-xl font-bold">{L("Unable to load hub datasets", "تعذر تحميل بيانات المنصة", lang)}</h1>
+          <p className="text-sm text-slate-500">{L("Check your connection or retry loading the archive.", "تحقق من الاتصال أو أعد المحاولة.", lang)}</p>
+          <button
+            type="button"
+            onClick={fetchDatasets}
+            className="inline-block px-4 py-2 rounded-lg bg-slate-900 text-white text-sm"
+          >
+            {L("Retry", "إعادة المحاولة", lang)}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!data) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 space-y-6">
@@ -143,7 +183,6 @@ export default function App() {
   }
 
   return (
-    <HubErrorBoundary>
       <Layout
         section={route.section}
         isArticleDetail={route.section === "journal" && Boolean(route.param)}
@@ -155,14 +194,14 @@ export default function App() {
         onToggleTheme={() => {
           setTheme((prev) => {
             const next = prev === "dark" ? "light" : "dark";
-            localStorage.setItem(THEME_KEY, next);
+            safeStorageSet(THEME_KEY, next);
             return next;
           });
         }}
         onToggleGlass={() => {
           setGlass((prev) => {
             const next = !prev;
-            localStorage.setItem(GLASS_KEY, String(next));
+            safeStorageSet(GLASS_KEY, String(next));
             return next;
           });
         }}
@@ -208,6 +247,13 @@ export default function App() {
             </div>
           )}
       </Layout>
+  );
+}
+
+export default function App() {
+  return (
+    <HubErrorBoundary>
+      <AppContent />
     </HubErrorBoundary>
   );
 }

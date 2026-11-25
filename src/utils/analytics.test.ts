@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  calculateReadingTimeMinutes,
+  countWords,
   filterAndSortProjects,
   filterAndSortRepos,
   formatBytesCompact,
@@ -176,4 +178,13 @@ test("searchDocuments filters by category and query", () => {
   assert.equal(searchDocuments(hits, "Suefco", "all").length, 1);
   assert.equal(searchDocuments(hits, "Suefco", "article").length, 0);
   assert.equal(formatBytesCompact(2048), "2.0 KB");
+});
+
+test("countWords and calculateReadingTimeMinutes compute reading time at 200 WPM", () => {
+  assert.equal(countWords(""), 0);
+  assert.equal(countWords("   hello   world \n\n test "), 3);
+  assert.equal(calculateReadingTimeMinutes(""), 1);
+  assert.equal(calculateReadingTimeMinutes(Array(200).fill("word").join(" ")), 1);
+  assert.equal(calculateReadingTimeMinutes(Array(201).fill("word").join(" ")), 2);
+  assert.equal(calculateReadingTimeMinutes(Array(650).fill("كلمة").join(" ")), 4);
 });

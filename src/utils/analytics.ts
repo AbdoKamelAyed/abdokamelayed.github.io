@@ -225,4 +225,20 @@ export function formatBytesCompact(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+export function countWords(text: string | null | undefined): number {
+  if (!text) return 0;
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).filter(Boolean).length;
+}
+
+export function calculateReadingTimeMinutes(
+  text: string | null | undefined,
+  wordsPerMinute = 200
+): number {
+  const words = countWords(text);
+  if (words === 0) return 1;
+  return Math.max(1, Math.ceil(words / wordsPerMinute));
+}
+
 export type { ExperienceDataset, KnowledgeEntry };

@@ -10,17 +10,29 @@ const CACHE_PREFIX = "abdo_hub_cache_v1:";
 export const DRAFT_PREFIX = "abdo_hub_admin_draft:";
 
 export function saveLocalDraft(datasetPath: string, payload: unknown): void {
-  localStorage.setItem(`${DRAFT_PREFIX}${datasetPath}`, JSON.stringify(payload));
+  try {
+    localStorage.setItem(`${DRAFT_PREFIX}${datasetPath}`, JSON.stringify(payload));
+  } catch {
+    // Ignore restricted or full localStorage
+  }
 }
 
 export function clearLocalDrafts(): void {
-  Object.keys(localStorage)
-    .filter((k) => k.startsWith(DRAFT_PREFIX))
-    .forEach((k) => localStorage.removeItem(k));
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(DRAFT_PREFIX))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // Ignore restricted localStorage
+  }
 }
 
 export function getLocalDraftCount(): number {
-  return Object.keys(localStorage).filter((k) => k.startsWith(DRAFT_PREFIX)).length;
+  try {
+    return Object.keys(localStorage).filter((k) => k.startsWith(DRAFT_PREFIX)).length;
+  } catch {
+    return 0;
+  }
 }
 
 async function fetchJsonWithCache<T>(path: string, fallback: T): Promise<T> {
@@ -29,11 +41,13 @@ async function fetchJsonWithCache<T>(path: string, fallback: T): Promise<T> {
     const draftRaw = localStorage.getItem(draftKey);
     if (draftRaw) return JSON.parse(draftRaw) as T;
   } catch {
-    // Ignore malformed localStorage
+    // Ignore malformed or restricted localStorage
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
   try {
-    const res = await fetch(path, { cache: "no-cache" });
+    const res = await fetch(path, { cache: "no-cache", signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as T;
     try {
@@ -50,6 +64,8 @@ async function fetchJsonWithCache<T>(path: string, fallback: T): Promise<T> {
       // Ignore
     }
     return fallback;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

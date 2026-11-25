@@ -1,7 +1,7 @@
 import React from "react";
 import { ArrowLeft } from "lucide-react";
 import type { HubDatasets, Lang } from "../types/hub";
-import { safeUrl } from "../utils/analytics";
+import { calculateReadingTimeMinutes, safeUrl } from "../utils/analytics";
 import { formatDate, L, loc, t } from "../utils/i18n";
 import { ArticleCard } from "../components/Cards";
 
@@ -28,7 +28,9 @@ export const ArticleDetailPage: React.FC<{
     );
   }
 
-  const paragraphs = loc(article.content, lang).split(/\n\n+/).filter(Boolean);
+  const rawContent = loc(article.content, lang);
+  const paragraphs = rawContent.split(/\n\n+/).filter(Boolean);
+  const readingMinutes = calculateReadingTimeMinutes(rawContent);
   const related = data.articles
     .filter((x) => x.id !== article.id && x.tags.some((tg) => article.tags.includes(tg)))
     .slice(0, 2);
@@ -54,7 +56,7 @@ export const ArticleDetailPage: React.FC<{
             <span className="tabular-nums">{formatDate(article.publishedAt, lang)}</span>
             <span aria-hidden="true">·</span>
             <span className="tabular-nums">
-              {article.readingTimeMinutes || 1} {L("min read", "دقيقة قراءة", lang)}
+              {readingMinutes} {L("min read", "دقيقة قراءة", lang)}
             </span>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
