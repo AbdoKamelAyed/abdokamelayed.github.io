@@ -1,0 +1,53 @@
+{
+  "id": "settings-profile",
+  "fullName": { "en": "Abdo Kamel", "ar": "عبدو كامل" },
+  "githubUsername": "AbdoKamelAyed",
+  "headline": {
+    "en": "Software Builder, Industrial Systems & Digital Platforms",
+    "ar": "مطور برمجيات وباني أنظمة صناعية ومنصات رقمية"
+  },
+  "shortBio": {
+    "en": "Founder of Suefco, based in Egypt. Building modular web applications, automation workflows, industrial tools, and structured technical documentation.",
+    "ar": "مؤسس Suefco، مقيم في مصر. أبني تطبيقات الويب المعيارية، أنظمة الأتمتة، الأدوات الصناعية، والتوثيق التقني المنظم."
+  },
+  "mission": {
+    "en": "Document real engineering work transparently, separate verifiable telemetry from editorial context, and maintain durable software archives.",
+    "ar": "توثيق العمل الهندسي الحقيقي بشفافية، والفصل بين البيانات القياسية الموثقة والسياق التحريري، وبناء أرشيف برمجي مستدام."
+  },
+  "careerDirection": {
+    "en": "Bridging practical industrial systems, software engineering, automation, and structured knowledge systems.",
+    "ar": "الربط بين الأنظمة الصناعية العملية، هندسة البرمجيات، الأتمتة، وأنظمة إدارة المعرفة."
+  },
+  "technicalInterests": [
+    "Web Applications",
+    "Industrial Systems",
+    "Automation Workflows",
+    "Developer Tools",
+    "AI & Data Systems",
+    "Knowledge Architecture"
+  ],
+  "selectedAchievements": [
+    {
+      "en": "Founded Suefco and maintained active public software repositories on GitHub.",
+      "ar": "تأسيس Suefco وإدارة مستودعات برمجية عامة نشطة على GitHub."
+    },
+    {
+      "en": "Built ABDO Personal Digital Hub as a zero-backend, bilingual, automated GitHub archive.",
+      "ar": "بناء منصة ABDO الرقمية الشخصية كأرشيف ثنائي اللغة ومؤتمت لبيانات GitHub دون خادم خلفي."
+    }
+  ],
+  "contact": {
+    "email": "",
+    "github": "https://github.com/AbdoKamelAyed",
+    "linkedin": "",
+    "website": "https://abdokamelayed.github.io",
+    "otherLinks": [
+      { "label": "Personal Card", "url": "https://abdokamel.carrd.co/" },
+      { "label": "X / Twitter", "url": "https://x.com/abdokamelayed" }
+    ]
+  },
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-settings"
+}

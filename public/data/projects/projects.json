@@ -1,0 +1,56 @@
+{
+  "id": "projects-collection",
+  "items": [
+    {
+      "id": "proj-abdo-digital-hub",
+      "slug": "abdo-personal-digital-hub",
+      "name": { "en": "ABDO — Personal Digital Hub", "ar": "عبدو — المنصة الرقمية الشخصية" },
+      "shortDescription": {
+        "en": "Continuously updated digital archive, GitHub intelligence dashboard, portfolio, and bilingual editorial platform for GitHub Pages.",
+        "ar": "أرشيف رقمي محدث باستمرار، ولوحة تحليلات GitHub، ومعرض أعمال، ومنصة نشر ثنائية اللغة متوافقة مع GitHub Pages."
+      },
+      "fullDescription": {
+        "en": "Designed to replace static one-page developer templates with a modular platform that separates automated GitHub API pipelines from manually curated engineering case studies, articles, and knowledge entries.",
+        "ar": "صُممت لتجاوز قوالب السيرة الثابتة عبر بنية معيارية تفصل بين البيانات المجمعة آلياً من GitHub والمحتوى الهندسي والتحريري المدار يدوياً."
+      },
+      "category": "web-applications",
+      "projectStatus": "Active",
+      "status": "Active",
+      "featured": true,
+      "sortOrder": 1,
+      "techStack": ["TypeScript", "React", "Tailwind CSS", "GitHub Actions", "GitHub REST & GraphQL"],
+      "githubRepoSlug": "abdokamelayed.github.io",
+      "githubRepoUrl": "https://github.com/AbdoKamelAyed/abdokamelayed.github.io",
+      "liveDemoUrl": "https://abdokamelayed.github.io",
+      "screenshots": ["/src/assets/images/project_systems_architecture_1795599465444.jpg"],
+      "features": [
+        "Automated daily GitHub REST & GraphQL synchronization via GitHub Actions",
+        "Strict schema separation between automated telemetry and manual portfolio data",
+        "Full English (LTR) and Arabic (RTL) bilingual interface with Light, Dark, and Glass themes",
+        "Local-first Admin Workspace with JSON schema validation and export"
+      ],
+      "objectives": [
+        "Maintain an accurate, verifiable public record of repositories, commits, and publications",
+        "Operate reliably on static GitHub Pages without exposing credentials or requiring a runtime server"
+      ],
+      "problemStatement": "Conventional portfolios decay quickly, mix manual writing with fragile client-side API scraping, and expose static templates without verifiable engineering depth.",
+      "developmentHistory": [
+        "2026-11: Defined modular JSON schemas, GitHub Actions collector, and bilingual UI architecture."
+      ],
+      "architectureOverview": "Static frontend reading cached JSON datasets updated by scheduled GitHub Actions, paired with localStorage caching and offline resilience.",
+      "releases": ["v1.0.0 — Initial modular digital hub & GitHub intelligence release"],
+      "roadmap": [
+        "Interactive project-to-knowledge relationship map",
+        "Automated printable CV and portfolio export"
+      ],
+      "documentation": "Includes automated schema validator (scripts/validate-schemas.mjs) and GitHub Actions sync workflow (.github/workflows/sync-github.yml).",
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "source": "manual-portfolio"
+    }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-portfolio"
+}

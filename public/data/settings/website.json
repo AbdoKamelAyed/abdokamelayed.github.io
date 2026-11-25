@@ -1,0 +1,21 @@
+{
+  "id": "settings-website",
+  "siteName": "ABDO — Personal Digital Hub",
+  "shortTitle": "ABDO",
+  "domain": "https://abdokamelayed.github.io",
+  "defaultLanguage": "en",
+  "supportedLanguages": ["en", "ar"],
+  "defaultTheme": "light",
+  "defaultGlassMode": false,
+  "primaryAccent": "#0f172a",
+  "secondaryAccent": "#2563eb",
+  "seoDescription": {
+    "en": "Personal digital hub, developer portfolio, GitHub intelligence archive, and editorial journal of Abdo Kamel.",
+    "ar": "المنصة الرقمية الشخصية، ملف الأعمال، لوحة تحليلات GitHub، والمدونة التقنية لعبدو كامل."
+  },
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-settings",
+  "version": "1.0.0"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "settings-github-sync",
+  "username": "AbdoKamelAyed",
+  "schedule": "daily",
+  "excludedRepos": [],
+  "featuredRepos": [],
+  "includeForksInLanguageStats": false,
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-settings"
+}

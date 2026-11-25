@@ -1,0 +1,16 @@
+{
+  "id": "journal-categories",
+  "items": [
+    { "id": "jcat-articles", "slug": "articles", "name": { "en": "Articles", "ar": "مقالات" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-editorial" },
+    { "id": "jcat-tech-notes", "slug": "technical-notes", "name": { "en": "Technical Notes", "ar": "ملاحظات تقنية" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-editorial" },
+    { "id": "jcat-dev-logs", "slug": "development-logs", "name": { "en": "Development Logs", "ar": "سجلات التطوير" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-editorial" },
+    { "id": "jcat-research", "slug": "research-notes", "name": { "en": "Research Notes", "ar": "ملاحظات بحثية" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-editorial" },
+    { "id": "jcat-updates", "slug": "project-updates", "name": { "en": "Project Updates", "ar": "تحديثات المشاريع" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-editorial" },
+    { "id": "jcat-reflections", "slug": "personal-reflections", "name": { "en": "Personal Reflections", "ar": "تأملات شخصية" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-editorial" },
+    { "id": "jcat-tutorials", "slug": "tutorials", "name": { "en": "Tutorials", "ar": "شروحات" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-editorial" }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-editorial"
+}

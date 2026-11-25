@@ -1,0 +1,45 @@
+{
+  "id": "knowledge-entries-collection",
+  "items": [
+    {
+      "id": "know-gh-linguist-note",
+      "title": { "en": "GitHub Linguist Byte Counts vs. Development Time", "ar": "حسابات Linguist للغات البرمجة مقابل وقت التطوير" },
+      "category": "references",
+      "entryType": "verified-reference",
+      "sourceAttribution": "GitHub REST API Documentation — Repository Languages",
+      "sourceUrl": "https://docs.github.com/en/rest/repos/repos#list-repository-languages",
+      "summary": {
+        "en": "GitHub reports repository language statistics by byte size of tracked source files, which can be influenced by vendored assets or generated files rather than engineering hours.",
+        "ar": "تحسب واجهة GitHub نسب اللغات بناءً على حجم البايتات في الملفات المتتبعة، مما قد يتأثر بالملفات المولدة ولا يعكس ساعات التطوير الفعلية."
+      },
+      "tags": ["github-api", "analytics", "methodology"],
+      "relatedIds": [],
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "external-reference"
+    },
+    {
+      "id": "know-static-admin-boundary",
+      "title": { "en": "Static Hosting Security Boundary for Admin Interfaces", "ar": "الحدود الأمنية للوحات الإدارة على الاستضافة الثابتة" },
+      "category": "technical-knowledge",
+      "entryType": "personal-note",
+      "sourceAttribution": "Personal Architecture Note — ABDO Digital Hub",
+      "sourceUrl": "",
+      "summary": {
+        "en": "Client-side password checks in static sites provide zero real authorization because all assets are public. Local-first drafting paired with Git-controlled JSON exports keeps the deployment honest and secure.",
+        "ar": "التحقق من كلمات المرور في المتصفح على المواقع الثابتة لا يوفر حماية حقيقية لأن كل الملفات عامة؛ لذا يعتمد النظام على المسودات المحلية والتصدير المنضبط عبر Git."
+      },
+      "tags": ["security", "github-pages", "architecture"],
+      "relatedIds": ["know-gh-linguist-note"],
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "personal-note"
+    }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-knowledge"
+}

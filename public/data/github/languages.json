@@ -1,0 +1,77 @@
+{
+  "id": "gh-languages-summary",
+  "disclaimer": "Language statistics reflect byte sizes reported by GitHub's Linguist API across public repositories, not actual development time.",
+  "totalBytes": 2662895,
+  "languages": [
+    {
+      "id": "gh-lang-javascript",
+      "language": "JavaScript",
+      "bytes": 1296969,
+      "percentage": 48.71,
+      "repoCount": 4,
+      "createdAt": "2026-11-25T09:39:17.285Z",
+      "updatedAt": "2026-11-25T09:39:17.285Z",
+      "status": "computed",
+      "source": "github-rest-languages"
+    },
+    {
+      "id": "gh-lang-typescript",
+      "language": "TypeScript",
+      "bytes": 1087680,
+      "percentage": 40.85,
+      "repoCount": 3,
+      "createdAt": "2026-11-25T09:39:17.285Z",
+      "updatedAt": "2026-11-25T09:39:17.285Z",
+      "status": "computed",
+      "source": "github-rest-languages"
+    },
+    {
+      "id": "gh-lang-css",
+      "language": "CSS",
+      "bytes": 185036,
+      "percentage": 6.95,
+      "repoCount": 11,
+      "createdAt": "2026-11-25T09:39:17.285Z",
+      "updatedAt": "2026-11-25T09:39:17.285Z",
+      "status": "computed",
+      "source": "github-rest-languages"
+    },
+    {
+      "id": "gh-lang-html",
+      "language": "HTML",
+      "bytes": 92284,
+      "percentage": 3.47,
+      "repoCount": 10,
+      "createdAt": "2026-11-25T09:39:17.285Z",
+      "updatedAt": "2026-11-25T09:39:17.285Z",
+      "status": "computed",
+      "source": "github-rest-languages"
+    },
+    {
+      "id": "gh-lang-shell",
+      "language": "Shell",
+      "bytes": 481,
+      "percentage": 0.02,
+      "repoCount": 1,
+      "createdAt": "2026-11-25T09:39:17.285Z",
+      "updatedAt": "2026-11-25T09:39:17.285Z",
+      "status": "computed",
+      "source": "github-rest-languages"
+    },
+    {
+      "id": "gh-lang-batchfile",
+      "language": "Batchfile",
+      "bytes": 445,
+      "percentage": 0.02,
+      "repoCount": 1,
+      "createdAt": "2026-11-25T09:39:17.285Z",
+      "updatedAt": "2026-11-25T09:39:17.285Z",
+      "status": "computed",
+      "source": "github-rest-languages"
+    }
+  ],
+  "createdAt": "2026-11-25T09:39:17.285Z",
+  "updatedAt": "2026-11-25T09:39:17.285Z",
+  "status": "computed",
+  "source": "github-rest-languages"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "knowledge-categories",
+  "items": [
+    { "id": "kcat-tech", "slug": "technical-knowledge", "name": { "en": "Technical Knowledge", "ar": "المعرفة التقنية" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-knowledge" },
+    { "id": "kcat-ind", "slug": "industrial-knowledge", "name": { "en": "Industrial Knowledge", "ar": "المعرفة الصناعية" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-knowledge" },
+    { "id": "kcat-biz", "slug": "business-knowledge", "name": { "en": "Business Knowledge", "ar": "المعرفة الإدارية والأعمال" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-knowledge" },
+    { "id": "kcat-res", "slug": "research", "name": { "en": "Research", "ar": "الأبحاث" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-knowledge" },
+    { "id": "kcat-learn", "slug": "learning-notes", "name": { "en": "Learning Notes", "ar": "ملاحظات التعلم" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-knowledge" },
+    { "id": "kcat-ref", "slug": "references", "name": { "en": "References", "ar": "المراجع" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-knowledge" },
+    { "id": "kcat-doc", "slug": "documentation", "name": { "en": "Documentation", "ar": "التوثيق" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-knowledge" }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-knowledge"
+}

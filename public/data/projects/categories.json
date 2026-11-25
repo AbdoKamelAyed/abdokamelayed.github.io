@@ -1,0 +1,17 @@
+{
+  "id": "projects-categories",
+  "items": [
+    { "id": "cat-web", "slug": "web-applications", "name": { "en": "Web Applications", "ar": "تطبيقات الويب" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" },
+    { "id": "cat-tools", "slug": "software-tools", "name": { "en": "Software & Tools", "ar": "البرمجيات والأدوات" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" },
+    { "id": "cat-industrial", "slug": "industrial-systems", "name": { "en": "Industrial Systems", "ar": "الأنظمة الصناعية" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" },
+    { "id": "cat-ai", "slug": "ai-data", "name": { "en": "AI & Data Projects", "ar": "مشاريع الذكاء الاصطناعي والبيانات" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" },
+    { "id": "cat-research", "slug": "research-experiments", "name": { "en": "Research & Experiments", "ar": "الأبحاث والتجارب" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" },
+    { "id": "cat-automation", "slug": "automation", "name": { "en": "Automation", "ar": "الأتمتة" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" },
+    { "id": "cat-personal", "slug": "personal-projects", "name": { "en": "Personal Projects", "ar": "المشاريع الشخصية" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" },
+    { "id": "cat-other", "slug": "other-projects", "name": { "en": "Other Projects", "ar": "مشاريع أخرى" }, "createdAt": "2026-11-25T00:00:00Z", "updatedAt": "2026-11-25T00:00:00Z", "status": "active", "source": "manual-portfolio" }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-portfolio"
+}

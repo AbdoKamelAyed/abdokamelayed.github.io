@@ -1,0 +1,18 @@
+{
+  "id": "gh-contributions-summary",
+  "note": "GitHub contribution calendar metrics (via GraphQL) are distinct from raw commit records collected from public repository endpoints.",
+  "available": false,
+  "unavailableReason": "GitHub GraphQL contribution calendar requires a read-only GH_METRICS_TOKEN secret in GitHub Actions.",
+  "totals": null,
+  "streaks": {
+    "currentStreak": null,
+    "longestStreak": null,
+    "mostActiveDay": null,
+    "weeklyTotals": []
+  },
+  "calendar": null,
+  "createdAt": "2026-11-25T09:39:17.285Z",
+  "updatedAt": "2026-11-25T09:39:17.285Z",
+  "status": "partial",
+  "source": "github-graphql-api"
+}

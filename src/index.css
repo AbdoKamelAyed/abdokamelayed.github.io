@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --hub-bg: #ffffff;
+  --hub-surface: #f8fafc;
+  --hub-surface-elevated: #ffffff;
+  --hub-border: #e2e8f0;
+  --hub-text: #0f172a;
+  --hub-text-muted: #475569;
+  --hub-primary: #0f172a;
+  --hub-secondary: #2563eb;
+  --font-display: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-ar: "Cairo", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.dark {
+  --hub-bg: #090b0f;
+  --hub-surface: #11151d;
+  --hub-surface-elevated: #151a24;
+  --hub-border: #232a36;
+  --hub-text: #f1f5f9;
+  --hub-text-muted: #94a3b8;
+  --hub-primary: #f8fafc;
+}
+
+[data-glass="true"] {
+  --hub-surface: rgba(248, 250, 252, 0.7);
+  --hub-surface-elevated: rgba(255, 255, 255, 0.72);
+}
+
+.dark[data-glass="true"] {
+  --hub-surface: rgba(17, 21, 29, 0.72);
+  --hub-surface-elevated: rgba(21, 26, 36, 0.74);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--hub-bg);
+    color: var(--hub-text);
+    font-family: var(--font-body);
+  }
+
+  html[dir="rtl"] body {
+    font-family: var(--font-ar);
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  html[dir="rtl"] h1,
+  html[dir="rtl"] h2,
+  html[dir="rtl"] h3,
+  html[dir="rtl"] .font-display {
+    font-family: var(--font-ar);
+  }
+
+  code, pre, .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  code, pre, .font-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+.hub-surface {
+  background-color: var(--hub-surface-elevated);
+  border-color: var(--hub-border);
+  backdrop-filter: blur(12px);
+}
+
+.hub-subtle {
+  background-color: var(--hub-surface);
+  border-color: var(--hub-border);
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

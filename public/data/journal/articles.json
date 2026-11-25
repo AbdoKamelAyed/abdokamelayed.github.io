@@ -1,0 +1,39 @@
+{
+  "id": "journal-articles-collection",
+  "items": [
+    {
+      "id": "art-architecture-digital-hub",
+      "slug": "designing-a-zero-backend-github-intelligence-hub",
+      "type": "development-logs",
+      "title": {
+        "en": "Designing a Zero-Backend Personal Digital Hub on GitHub Pages",
+        "ar": "تصميم منصة رقمية شخصية دون خادم خلفي على GitHub Pages"
+      },
+      "subtitle": {
+        "en": "Separating automated GitHub API pipelines from curated portfolio narratives.",
+        "ar": "فصل خطوط جمع بيانات GitHub الآلية عن المحتوى التحريري المدار يدوياً."
+      },
+      "content": {
+        "en": "Static hosting does not have to mean static information.\n\nBy delegating API collection, normalization, and schema validation to scheduled GitHub Actions workflows, the frontend stays fast, resilient to API rate limits, and completely free of exposed credentials.\n\nManual project case studies, articles, and knowledge entries live in separate JSON stores so automated updates never overwrite human context. When a repository is synced, its raw telemetry enriches the portfolio view without altering curated descriptions or project status.",
+        "ar": "الاستضافة الثابتة لا تعني معلومات جامدة.\n\nمن خلال إسناد جمع البيانات والتحقق من بنيتها إلى GitHub Actions، تبقى الواجهة سريعة ومحمية من حدود الطلبات وخالية من أي مفاتيح سرية مكشوفة.\n\nتُحفظ دراسات الحالة والمقالات وإدخالات المعرفة في ملفات JSON منفصلة لضمان عدم استبدال السياق اليدوي أبداً أثناء المزامنة الآلية."
+      },
+      "coverImage": "/src/assets/images/journal_editorial_cover_1795599465037.jpg",
+      "publishedAt": "2026-11-25",
+      "categories": ["development-logs"],
+      "tags": ["architecture", "github-actions", "github-pages"],
+      "readingTimeMinutes": 3,
+      "featured": true,
+      "seo": {
+        "description": "How ABDO Personal Digital Hub separates automated GitHub intelligence from curated editorial content."
+      },
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "published",
+      "source": "manual-editorial"
+    }
+  ],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-editorial"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "experience-collection",
+  "items": [
+    {
+      "id": "exp-suefco-founder",
+      "role": { "en": "Founder", "ar": "المؤسس" },
+      "organization": { "en": "Suefco", "ar": "Suefco" },
+      "kind": "Professional & Industrial",
+      "period": "Present",
+      "location": { "en": "Egypt", "ar": "مصر" },
+      "summary": {
+        "en": "Leading technical systems, digital tools, and operational initiatives at Suefco.",
+        "ar": "قيادة الأنظمة التقنية والأدوات الرقمية والمبادرات التشغيلية في Suefco."
+      },
+      "skills": ["Systems Architecture", "Automation", "Software Engineering"],
+      "createdAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-25T00:00:00Z",
+      "status": "active",
+      "source": "manual-portfolio"
+    }
+  ],
+  "skills": [
+    {
+      "group": { "en": "Software & Web Engineering", "ar": "هندسة البرمجيات والويب" },
+      "items": ["HTML5", "CSS3", "TypeScript", "JavaScript (ES6+)", "React", "GitHub Actions", "REST & GraphQL APIs"]
+    },
+    {
+      "group": { "en": "Systems & Industrial Practice", "ar": "الأنظمة والممارسة الصناعية" },
+      "items": ["Modular Architecture", "Automation Pipelines", "Structured Data Schemas", "Technical Documentation"]
+    }
+  ],
+  "knowledgeAreas": ["Web Engineering", "Industrial Systems", "Automation Workflows", "Digital Archives"],
+  "researchInterests": ["Developer Intelligence", "Knowledge Organization", "Software Reliability", "AI Tooling"],
+  "caseStudies": [],
+  "professionalDevelopment": [],
+  "createdAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
+  "status": "active",
+  "source": "manual-portfolio"
+}

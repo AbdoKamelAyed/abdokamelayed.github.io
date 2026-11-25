@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://abdokamelayed.github.io/sitemap.xml
