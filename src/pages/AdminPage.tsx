@@ -1,6 +1,6 @@
 import React, { useState } from "react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import type {
-  ArticleRecord,
   ExperienceItem,
   HubDatasets,
   KnowledgeEntry,
@@ -9,15 +9,25 @@ import type {
   ProjectStatus,
 } from "../types/hub";
 import {
-  clearLocalDrafts,
-  getLocalDraftCount,
   refreshPublicGithubLive,
   saveLocalDraft,
 } from "../services/dataService";
+import {
+  appendAuditEntry,
+  clearAdminSession,
+  getActiveAdminSession,
+  getAuditLog,
+  type AdminAuditEntry,
+  type AdminSessionRecord,
+} from "../utils/adminAuth";
 import { slugify, validateCollectionSchema } from "../utils/analytics";
-import { formatDate, L, loc, t } from "../utils/i18n";
+import { formatDateTime, L, loc, t } from "../utils/i18n";
+import { AdminLoginGate } from "../components/admin/AdminLoginGate";
+import { AdminOverview } from "../components/admin/AdminOverview";
+import { ArticleRichEditor } from "../components/admin/ArticleRichEditor";
+import { SiteSettingsPanel } from "../components/admin/SiteSettingsPanel";
 
-type AdminTab = "overview" | "projects" | "content" | "github" | "settings";
+type AdminTab = "overview" | "editor" | "projects" | "knowledge" | "github" | "settings";
 
 const PROJECT_STATUSES: ProjectStatus[] = [
   "Planning",
@@ -46,9 +56,11 @@ export const AdminPage: React.FC<{
   onReloadFromSource: () => Promise<void>;
   onApplyWebsiteTheme: (website: HubDatasets["website"]) => void;
 }> = ({ data, lang, onUpdateData, onReloadFromSource, onApplyWebsiteTheme }) => {
+  const [session, setSession] = useState<AdminSessionRecord | null>(() => getActiveAdminSession());
   const [tab, setTab] = useState<AdminTab>("overview");
   const [statusBanner, setStatusBanner] = useState("");
   const [liveGhResult, setLiveGhResult] = useState("");
+  const [auditLog, setAuditLog] = useState<AdminAuditEntry[]>(() => getAuditLog());
 
   // Project form state
   const [editingProjId, setEditingProjId] = useState<string | null>(null);
@@ -64,13 +76,6 @@ export const AdminPage: React.FC<{
   const [projDemoUrl, setProjDemoUrl] = useState("");
   const [projScreenshot, setProjScreenshot] = useState("");
   const [projFeatured, setProjFeatured] = useState(false);
-
-  // Article form state
-  const [artTitleEn, setArtTitleEn] = useState("");
-  const [artSubEn, setArtSubEn] = useState("");
-  const [artType, setArtType] = useState(data.journalCategories[0]?.slug || "articles");
-  const [artContentEn, setArtContentEn] = useState("");
-  const [artTags, setArtTags] = useState("");
 
   // Knowledge form state
   const [knowTitleEn, setKnowTitleEn] = useState("");
@@ -90,13 +95,24 @@ export const AdminPage: React.FC<{
   const [excludedInput, setExcludedInput] = useState(data.githubSyncSettings.excludedRepos.join(", "));
   const [featuredInput, setFeaturedInput] = useState(data.githubSyncSettings.featuredRepos.join(", "));
 
-  // Website / Profile settings state
-  const [headlineEn, setHeadlineEn] = useState(loc(data.profileSettings.headline, "en"));
-  const [bioEn, setBioEn] = useState(loc(data.profileSettings.shortBio, "en"));
-  const [email, setEmail] = useState(data.profileSettings.contact.email || "");
-  const [linkedin, setLinkedin] = useState(data.profileSettings.contact.linkedin || "");
-  const [secondaryAccent, setSecondaryAccent] = useState(data.website.secondaryAccent || "#2563eb");
-  const [seoEn, setSeoEn] = useState(loc(data.website.seoDescription, "en"));
+  const recordAudit = (action: string, target: string) => {
+    const next = appendAuditEntry(action, target, session?.username || "admin");
+    setAuditLog(next);
+  };
+
+  if (!session) {
+    return (
+      <AdminLoginGate
+        lang={lang}
+        defaultUsername={data.profileSettings.githubUsername || "AbdoKamelAyed"}
+        onAuthenticated={(newSession) => {
+          setSession(newSession);
+          const next = appendAuditEntry("Signed In", "Admin Portal", newSession.username);
+          setAuditLog(next);
+        }}
+      />
+    );
+  }
 
   const nowIso = () => new Date().toISOString();
 
@@ -201,73 +217,10 @@ export const AdminPage: React.FC<{
     }
 
     if (persistProjects(next)) {
+      recordAudit(editingProjId ? "Updated Project" : "Created Project", projNameEn.trim());
       setStatusBanner(L("Project saved to local browser draft.", "تم حفظ المشروع في المسودة المحلية.", lang));
       resetProjectForm();
     }
-  };
-
-  const handleSaveArticle = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!artTitleEn.trim() || !artContentEn.trim()) return;
-    const ts = nowIso();
-    const slug = slugify(artTitleEn);
-    const created: ArticleRecord = {
-      id: `art-${slug}-${Date.now()}`,
-      slug,
-      type: artType,
-      title: { en: artTitleEn.trim(), ar: artTitleEn.trim() },
-      subtitle: { en: artSubEn.trim(), ar: artSubEn.trim() },
-      content: { en: artContentEn.trim(), ar: artContentEn.trim() },
-      publishedAt: ts.slice(0, 10),
-      categories: [artType],
-      tags: artTags.split(",").map((s) => s.trim()).filter(Boolean),
-      readingTimeMinutes: Math.max(1, Math.ceil(artContentEn.trim().split(/\s+/).length / 200)),
-      featured: false,
-      createdAt: ts,
-      updatedAt: ts,
-      status: "published",
-      source: "manual-editorial",
-    };
-    const nextRaw = [created, ...data.allArticlesRaw];
-    const payload = {
-      id: "journal-articles-collection",
-      items: nextRaw,
-      createdAt: "2026-11-25T00:00:00Z",
-      updatedAt: ts,
-      status: "active",
-      source: "manual-editorial",
-    };
-    saveLocalDraft("./data/journal/articles.json", payload);
-    onUpdateData((prev) => ({
-      ...prev,
-      allArticlesRaw: nextRaw,
-      articles: nextRaw.filter((a) => a.status === "published"),
-    }));
-    setArtTitleEn("");
-    setArtSubEn("");
-    setArtContentEn("");
-    setArtTags("");
-    setStatusBanner(L("Article saved to local draft.", "تم حفظ المقال في المسودة المحلية.", lang));
-  };
-
-  const handleToggleArticlePublish = (id: string) => {
-    const ts = nowIso();
-    const nextRaw = data.allArticlesRaw.map((a) =>
-      a.id === id ? { ...a, status: a.status === "published" ? ("draft" as const) : ("published" as const), updatedAt: ts } : a
-    );
-    saveLocalDraft("./data/journal/articles.json", {
-      id: "journal-articles-collection",
-      items: nextRaw,
-      createdAt: "2026-11-25T00:00:00Z",
-      updatedAt: ts,
-      status: "active",
-      source: "manual-editorial",
-    });
-    onUpdateData((prev) => ({
-      ...prev,
-      allArticlesRaw: nextRaw,
-      articles: nextRaw.filter((a) => a.status === "published"),
-    }));
   };
 
   const handleSaveKnowledge = (e: React.FormEvent) => {
@@ -303,6 +256,7 @@ export const AdminPage: React.FC<{
       allKnowledgeRaw: nextRaw,
       knowledge: nextRaw.filter((k) => k.status === "published"),
     }));
+    recordAudit("Added Knowledge Entry", knowTitleEn.trim());
     setKnowTitleEn("");
     setKnowSourceAttr("");
     setKnowSourceUrl("");
@@ -331,6 +285,7 @@ export const AdminPage: React.FC<{
     const nextExp = { ...data.experience, items: [created, ...data.experience.items], updatedAt: ts };
     saveLocalDraft("./data/experience/experience.json", nextExp);
     onUpdateData((prev) => ({ ...prev, experience: nextExp }));
+    recordAudit("Added Experience", `${expRoleEn.trim()} @ ${expOrgEn.trim()}`);
     setExpRoleEn("");
     setExpOrgEn("");
     setExpPeriod("");
@@ -338,32 +293,44 @@ export const AdminPage: React.FC<{
     setStatusBanner(L("Experience entry saved to local draft.", "تم حفظ الخبرة في المسودة المحلية.", lang));
   };
 
-  const projValidation = validateCollectionSchema({ items: data.projects as unknown as Array<Record<string, unknown>> });
-
   return (
     <div className="space-y-8">
-      <header className="border-b border-[var(--hub-border)] pb-6 space-y-3">
-        <h1 className="font-display text-3xl font-bold tracking-tight">{t("admin.title", lang)}</h1>
-        <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-4 text-sm text-[var(--hub-text-muted)]">
-          <strong className="text-[var(--hub-text)]">
-            {L("Static Hosting Security Model:", "النموذج الأمني للاستضافة الثابتة:", lang)}
-          </strong>{" "}
-          {L(
-            "GitHub Pages serves public static files without fake browser passwords or exposed credentials. Edits made here stage in local browser storage for live preview and export clean schema-validated JSON files for controlled Git commits.",
-            "يستضيف GitHub Pages ملفات ثابتة عامة دون كلمات مرور وهمية في المتصفح أو مفاتيح مكشوفة. تُحفظ التعديلات هنا كمسودات محلية للمعاينة الفورية وتُصدَّر كملفات JSON صالحة للاعتماد عبر Git.",
-            lang
-          )}
+      <header className="border-b border-[var(--hub-border)] pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400">
+            <ShieldCheck className="w-4 h-4" />
+            <span>
+              {L("Authenticated Operator:", "المسؤول النشط:", lang)} {session.username} ·{" "}
+              {L("Session expires", "تنتهي الجلسة", lang)} {formatDateTime(session.expiresAt, lang)}
+            </span>
+          </div>
+          <h1 className="font-display text-3xl font-bold tracking-tight">{t("admin.title", lang)}</h1>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              clearAdminSession();
+              setSession(null);
+            }}
+            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>{L("Lock & Sign Out", "قفل وتسجيل الخروج", lang)}</span>
+          </button>
         </div>
       </header>
 
       <div className="flex flex-wrap gap-2 border-b border-[var(--hub-border)] pb-3">
         {(
           [
-            ["overview", L("Overview", "نظرة عامة", lang)],
+            ["overview", L("Command Dashboard", "لوحة التحكم", lang)],
+            ["editor", L("Rich Article Editor", "المحرر المتقدم", lang)],
             ["projects", L("Projects", "المشاريع", lang)],
-            ["content", L("Content & Knowledge", "المحتوى والمعرفة", lang)],
+            ["knowledge", L("Knowledge & Work", "المعرفة والخبرات", lang)],
             ["github", L("GitHub Sync", "مزامنة GitHub", lang)],
-            ["settings", L("Website Settings", "إعدادات الموقع", lang)],
+            ["settings", L("Site Settings", "إعدادات الموقع", lang)],
           ] as [AdminTab, string][]
         ).map(([id, label]) => (
           <button
@@ -391,47 +358,39 @@ export const AdminPage: React.FC<{
       )}
 
       {tab === "overview" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-xl border border-[var(--hub-border)] hub-surface p-5">
-              <div className="text-xs text-[var(--hub-text-muted)]">{L("Projects", "المشاريع", lang)}</div>
-              <div className="mt-1 text-2xl font-bold font-mono tabular-nums">{data.projects.length}</div>
-            </div>
-            <div className="rounded-xl border border-[var(--hub-border)] hub-surface p-5">
-              <div className="text-xs text-[var(--hub-text-muted)]">{L("Published Articles", "المقالات المنشورة", lang)}</div>
-              <div className="mt-1 text-2xl font-bold font-mono tabular-nums">{data.articles.length}</div>
-            </div>
-            <div className="rounded-xl border border-[var(--hub-border)] hub-surface p-5">
-              <div className="text-xs text-[var(--hub-text-muted)]">{L("GitHub Sync", "مزامنة GitHub", lang)}</div>
-              <div className="mt-1 text-base font-bold font-mono">{data.github.syncMeta.syncStatus}</div>
-            </div>
-            <div className="rounded-xl border border-[var(--hub-border)] hub-surface p-5">
-              <div className="text-xs text-[var(--hub-text-muted)]">{L("Local Draft Files", "ملفات المسودات المحلية", lang)}</div>
-              <div className="mt-1 text-2xl font-bold font-mono tabular-nums">{getLocalDraftCount()}</div>
-            </div>
-          </div>
+        <AdminOverview
+          data={data}
+          lang={lang}
+          auditLog={auditLog}
+          onNavigateTab={(tId) => setTab(tId)}
+          onReloadFromSource={onReloadFromSource}
+          onNotify={setStatusBanner}
+          onExportBundle={() => {
+            downloadJson(`abdo-hub-backup-${nowIso().slice(0, 10)}.json`, {
+              exportedAt: nowIso(),
+              website: data.website,
+              profileSettings: data.profileSettings,
+              githubSyncSettings: data.githubSyncSettings,
+              projects: data.projects,
+              articles: data.allArticlesRaw,
+              knowledge: data.allKnowledgeRaw,
+              experience: data.experience,
+            });
+            recordAudit("Exported Full Backup", "All Datasets");
+          }}
+        />
+      )}
 
-          <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
-            <h2 className="font-display text-lg font-semibold">{L("System Health & Draft Controls", "سلامة البيانات والتحكم بالمسودات", lang)}</h2>
-            <p className="text-sm text-[var(--hub-text-muted)]">
-              {L("Project Schema Validation:", "التحقق من مخطط المشاريع:", lang)}{" "}
-              <strong className="text-[var(--hub-text)]">
-                {projValidation.valid ? L("Valid (0 errors)", "سليم (0 أخطاء)", lang) : projValidation.errors.join("; ")}
-              </strong>
-            </p>
-            <button
-              type="button"
-              onClick={async () => {
-                clearLocalDrafts();
-                await onReloadFromSource();
-                setStatusBanner(L("Cleared local browser drafts and reloaded published JSON.", "تم مسح المسودات المحلية وإعادة تحميل البيانات المنشورة.", lang));
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-semibold border border-red-600/40 text-red-700 dark:text-red-400 cursor-pointer"
-            >
-              {L("Reset Local Drafts", "مسح المسودات المحلية", lang)}
-            </button>
-          </div>
-        </div>
+      {tab === "editor" && (
+        <ArticleRichEditor
+          data={data}
+          lang={lang}
+          adminUsername={session.username}
+          onUpdateData={onUpdateData}
+          onNotify={setStatusBanner}
+          onAudit={recordAudit}
+          onDownloadJson={downloadJson}
+        />
       )}
 
       {tab === "projects" && (
@@ -597,6 +556,7 @@ export const AdminPage: React.FC<{
                       onClick={() => {
                         const next = data.projects.filter((x) => x.id !== p.id);
                         persistProjects(next);
+                        recordAudit("Deleted Project", loc(p.name, "en"));
                       }}
                       className="px-2.5 py-1 rounded border border-red-600/40 text-xs font-medium text-red-700 dark:text-red-400 cursor-pointer"
                     >
@@ -610,90 +570,9 @@ export const AdminPage: React.FC<{
         </div>
       )}
 
-      {tab === "content" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Journal */}
-          <form onSubmit={handleSaveArticle} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 space-y-3">
-            <h2 className="font-display text-lg font-semibold">{L("Journal Publishing", "نشر في المدونة", lang)}</h2>
-            <input
-              type="text"
-              required
-              value={artTitleEn}
-              onChange={(e) => setArtTitleEn(e.target.value)}
-              placeholder={L("Article Title", "عنوان المقال", lang)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-            <input
-              type="text"
-              value={artSubEn}
-              onChange={(e) => setArtSubEn(e.target.value)}
-              placeholder={L("Subtitle", "عنوان فرعي", lang)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-            <select
-              value={artType}
-              onChange={(e) => setArtType(e.target.value)}
-              aria-label={L("Publication Type", "نوع المنشور", lang)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            >
-              {data.journalCategories.map((c) => (
-                <option key={c.id} value={c.slug}>{loc(c.name, lang)}</option>
-              ))}
-            </select>
-            <textarea
-              required
-              rows={4}
-              value={artContentEn}
-              onChange={(e) => setArtContentEn(e.target.value)}
-              placeholder={L("Article content...", "محتوى المقال...", lang)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-            <input
-              type="text"
-              value={artTags}
-              onChange={(e) => setArtTags(e.target.value)}
-              placeholder={L("Tags (comma separated)", "الوسوم (مفصولة بفاصلة)", lang)}
-              className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-            <div className="flex flex-wrap gap-2">
-              <button type="submit" className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
-                {L("Publish Draft", "حفظ المنشور", lang)}
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  downloadJson("articles.json", {
-                    id: "journal-articles-collection",
-                    items: data.allArticlesRaw,
-                    createdAt: "2026-11-25T00:00:00Z",
-                    updatedAt: nowIso(),
-                    status: "active",
-                    source: "manual-editorial",
-                  })
-                }
-                className="px-3.5 py-2 rounded-lg text-xs border border-[var(--hub-border)] cursor-pointer"
-              >
-                {L("Export articles.json", "تصدير articles.json", lang)}
-              </button>
-            </div>
-            <ul className="divide-y divide-[var(--hub-border)] pt-2">
-              {data.allArticlesRaw.map((a) => (
-                <li key={a.id} className="py-2 flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate font-medium">{loc(a.title, lang)}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleArticlePublish(a.id)}
-                    className="px-2 py-0.5 rounded border border-[var(--hub-border)] cursor-pointer shrink-0"
-                  >
-                    {a.status === "published" ? L("Unpublish", "إلغاء النشر", lang) : L("Publish", "نشر", lang)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </form>
-
-          {/* Knowledge */}
-          <form onSubmit={handleSaveKnowledge} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 space-y-3">
+      {tab === "knowledge" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <form onSubmit={handleSaveKnowledge} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-3">
             <h2 className="font-display text-lg font-semibold">{L("Knowledge Archive", "إدارة المعرفة", lang)}</h2>
             <input
               type="text"
@@ -726,7 +605,7 @@ export const AdminPage: React.FC<{
               type="text"
               value={knowSourceAttr}
               onChange={(e) => setKnowSourceAttr(e.target.value)}
-              placeholder={L("Source Attribution (required for facts)", "نسبة المصدر", lang)}
+              placeholder={L("Source Attribution", "نسبة المصدر", lang)}
               className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
             />
             <input
@@ -745,7 +624,7 @@ export const AdminPage: React.FC<{
               className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
             />
             <div className="flex flex-wrap gap-2">
-              <button type="submit" className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
+              <button type="submit" className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
                 {L("Save Knowledge Entry", "حفظ الإدخال", lang)}
               </button>
               <button
@@ -760,15 +639,14 @@ export const AdminPage: React.FC<{
                     source: "manual-knowledge",
                   })
                 }
-                className="px-3.5 py-2 rounded-lg text-xs border border-[var(--hub-border)] cursor-pointer"
+                className="px-4 py-2 rounded-lg text-xs border border-[var(--hub-border)] cursor-pointer"
               >
                 {L("Export entries.json", "تصدير entries.json", lang)}
               </button>
             </div>
           </form>
 
-          {/* Work Experience */}
-          <form onSubmit={handleSaveExperience} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 space-y-3">
+          <form onSubmit={handleSaveExperience} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-3">
             <h2 className="font-display text-lg font-semibold">{L("Work & Experience", "الخبرات المهنية", lang)}</h2>
             <input
               type="text"
@@ -801,13 +679,13 @@ export const AdminPage: React.FC<{
               className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
             />
             <div className="flex flex-wrap gap-2">
-              <button type="submit" className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
+              <button type="submit" className="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
                 {L("Add Experience", "إضافة خبرة", lang)}
               </button>
               <button
                 type="button"
                 onClick={() => downloadJson("experience.json", data.experience)}
-                className="px-3.5 py-2 rounded-lg text-xs border border-[var(--hub-border)] cursor-pointer"
+                className="px-4 py-2 rounded-lg text-xs border border-[var(--hub-border)] cursor-pointer"
               >
                 {L("Export experience.json", "تصدير experience.json", lang)}
               </button>
@@ -821,7 +699,7 @@ export const AdminPage: React.FC<{
           <h2 className="font-display text-xl font-semibold">{L("GitHub Synchronization & Exclusions", "إدارة مزامنة GitHub", lang)}</h2>
           <div className="text-sm text-[var(--hub-text-muted)] space-y-1 font-mono">
             <div>Status: {data.github.syncMeta.syncStatus}</div>
-            <div>Last Successful Sync: {formatDate(data.github.syncMeta.lastSuccessfulSync, lang)}</div>
+            <div>Last Successful Sync: {formatDateTime(data.github.syncMeta.lastSuccessfulSync, lang)}</div>
             <div>Errors: {data.github.syncMeta.errorCount}</div>
           </div>
 
@@ -860,6 +738,7 @@ export const AdminPage: React.FC<{
               };
               saveLocalDraft("./data/settings/github-sync.json", nextSync);
               onUpdateData((prev) => ({ ...prev, githubSyncSettings: nextSync }));
+              recordAudit("Updated GitHub Sync Config", nextSync.username);
               setStatusBanner(L("Saved GitHub sync preferences.", "تم حفظ إعدادات مزامنة GitHub.", lang));
             }}
             className="space-y-3 pt-4 border-t border-[var(--hub-border)]"
@@ -903,119 +782,16 @@ export const AdminPage: React.FC<{
       )}
 
       {tab === "settings" && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const ts = nowIso();
-            const nextProfile = {
-              ...data.profileSettings,
-              headline: {
-                en: headlineEn.trim(),
-                ar: typeof data.profileSettings.headline === "object" ? data.profileSettings.headline.ar : headlineEn.trim(),
-              },
-              shortBio: {
-                en: bioEn.trim(),
-                ar: typeof data.profileSettings.shortBio === "object" ? data.profileSettings.shortBio.ar : bioEn.trim(),
-              },
-              contact: { ...data.profileSettings.contact, email: email.trim(), linkedin: linkedin.trim() },
-              updatedAt: ts,
-            };
-            const nextWebsite = {
-              ...data.website,
-              secondaryAccent,
-              seoDescription: {
-                en: seoEn.trim(),
-                ar: typeof data.website.seoDescription === "object" ? data.website.seoDescription.ar : seoEn.trim(),
-              },
-              updatedAt: ts,
-            };
-            saveLocalDraft("./data/settings/profile.json", nextProfile);
-            saveLocalDraft("./data/settings/website.json", nextWebsite);
-            onUpdateData((prev) => ({ ...prev, profileSettings: nextProfile, website: nextWebsite }));
-            onApplyWebsiteTheme(nextWebsite);
-            setStatusBanner(L("Saved profile & website settings to local draft.", "تم حفظ إعدادات الموقع والملف الشخصي.", lang));
-          }}
-          className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4 max-w-2xl"
-        >
-          <h2 className="font-display text-xl font-semibold">{L("Profile, Theme & SEO Settings", "إعدادات الهوية والمظهر وSEO", lang)}</h2>
-          <div>
-            <label className="text-xs font-semibold text-[var(--hub-text-muted)]">{L("Headline (EN)", "العنوان المهني", lang)}</label>
-            <input
-              type="text"
-              value={headlineEn}
-              onChange={(e) => setHeadlineEn(e.target.value)}
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--hub-text-muted)]">{L("Short Biography (EN)", "النبذة المختصرة", lang)}</label>
-            <textarea
-              rows={3}
-              value={bioEn}
-              onChange={(e) => setBioEn(e.target.value)}
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-[var(--hub-text-muted)]">{L("Public Email", "البريد العام", lang)}</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-[var(--hub-text-muted)]">{L("LinkedIn URL", "رابط LinkedIn", lang)}</label>
-              <input
-                type="url"
-                value={linkedin}
-                onChange={(e) => setLinkedin(e.target.value)}
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--hub-text-muted)]">{L("SEO Description (EN)", "وصف محركات البحث", lang)}</label>
-            <input
-              type="text"
-              value={seoEn}
-              onChange={(e) => setSeoEn(e.target.value)}
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
-              {L("Secondary Accent Color", "اللون الثانوي", lang)}
-            </label>
-            <input
-              type="color"
-              value={secondaryAccent}
-              onChange={(e) => setSecondaryAccent(e.target.value)}
-              className="h-10 w-16 rounded border border-[var(--hub-border)] cursor-pointer"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
-              {L("Save Settings Draft", "حفظ الإعدادات", lang)}
-            </button>
-            <button
-              type="button"
-              onClick={() => downloadJson("profile.json", data.profileSettings)}
-              className="px-4 py-2 rounded-lg text-sm border border-[var(--hub-border)] cursor-pointer"
-            >
-              {L("Export profile.json", "تصدير profile.json", lang)}
-            </button>
-            <button
-              type="button"
-              onClick={() => downloadJson("website.json", data.website)}
-              className="px-4 py-2 rounded-lg text-sm border border-[var(--hub-border)] cursor-pointer"
-            >
-              {L("Export website.json", "تصدير website.json", lang)}
-            </button>
-          </div>
-        </form>
+        <SiteSettingsPanel
+          data={data}
+          lang={lang}
+          adminUsername={session.username}
+          onUpdateData={onUpdateData}
+          onApplyWebsiteTheme={onApplyWebsiteTheme}
+          onNotify={setStatusBanner}
+          onAudit={recordAudit}
+          onDownloadJson={downloadJson}
+        />
       )}
     </div>
   );

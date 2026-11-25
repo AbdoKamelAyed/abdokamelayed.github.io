@@ -240,6 +240,8 @@ export interface ArticleRecord {
   subtitle: LocalizedText;
   content: LocalizedText;
   coverImage?: string;
+  author?: string;
+  authorHandle?: string;
   publishedAt: string;
   categories: string[];
   tags: string[];
@@ -296,6 +298,7 @@ export interface WebsiteSettings {
   siteName: string;
   shortTitle: string;
   domain: string;
+  defaultAuthor?: string;
   defaultLanguage: Lang;
   supportedLanguages: Lang[];
   defaultTheme: "light" | "dark";

@@ -126,6 +126,7 @@ export const ArticleCard: React.FC<{
 
         <div className="pt-3 border-t border-[var(--hub-border)] flex items-center justify-between gap-3">
           <span className="text-xs text-[var(--hub-text-muted)] truncate">
+            {article.author ? `${article.author} · ` : ""}
             {article.tags.map((tg) => `#${tg}`).join(" · ")}
           </span>
           <a

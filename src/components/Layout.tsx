@@ -17,7 +17,6 @@ export type RouteSection =
 
 interface LayoutProps {
   section: RouteSection;
-  isArticleDetail: boolean;
   lang: Lang;
   theme: "light" | "dark";
   glass: boolean;
@@ -41,7 +40,6 @@ const NAV_ITEMS: { id: RouteSection; href: string; key: string }[] = [
 
 export const Layout: React.FC<LayoutProps> = ({
   section,
-  isArticleDetail,
   lang,
   theme,
   glass,
@@ -56,7 +54,6 @@ export const Layout: React.FC<LayoutProps> = ({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchCat, setSearchCat] = useState("all");
-  const [scrollProgress, setScrollProgress] = useState(0);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -83,19 +80,6 @@ export const Layout: React.FC<LayoutProps> = ({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  useEffect(() => {
-    if (!isArticleDetail) {
-      setScrollProgress(0);
-      return;
-    }
-    const onScroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      setScrollProgress(max > 0 ? Math.min(100, Math.round((window.scrollY / max) * 100)) : 0);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [isArticleDetail]);
-
   const searchIndex = useMemo(() => buildSearchIndex(data, lang), [data, lang]);
   const hits = useMemo(
     () => searchDocuments(searchIndex, debouncedQuery, searchCat),
@@ -104,18 +88,6 @@ export const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--hub-bg)] text-[var(--hub-text)] transition-colors duration-200">
-      {isArticleDetail && (
-        <div
-          className="fixed top-0 inset-x-0 h-[3px] z-50 bg-transparent pointer-events-none"
-          aria-hidden="true"
-        >
-          <div
-            className="h-full transition-[width] duration-100"
-            style={{ width: `${scrollProgress}%`, backgroundColor: "var(--hub-secondary)" }}
-          />
-        </div>
-      )}
-
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-slate-900 focus:text-white"

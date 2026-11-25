@@ -3,6 +3,7 @@
   "siteName": "ABDO — Personal Digital Hub",
   "shortTitle": "ABDO",
   "domain": "https://abdokamelayed.github.io",
+  "defaultAuthor": "Abdo Kamel",
   "defaultLanguage": "en",
   "supportedLanguages": ["en", "ar"],
   "defaultTheme": "light",

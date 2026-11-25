@@ -90,3 +90,183 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+@media print {
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  :root,
+  .dark,
+  [data-glass="true"],
+  .dark[data-glass="true"] {
+    --hub-bg: #ffffff !important;
+    --hub-surface: #ffffff !important;
+    --hub-surface-elevated: #ffffff !important;
+    --hub-border: #cbd5e1 !important;
+    --hub-text: #0f172a !important;
+    --hub-text-muted: #334155 !important;
+    --hub-primary: #0f172a !important;
+    --hub-secondary: #1e293b !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11pt;
+    line-height: 1.65;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide site navigation, site footer, reading progress bar, and non-article chrome */
+  #root > div > header,
+  #root > div > footer,
+  nav,
+  a[href="#main-content"],
+  [data-testid="reading-progress-bar"],
+  [role="progressbar"],
+  #main-content > div > div:has(> a[href="#/journal"]),
+  section[aria-labelledby="related-reading-heading"] {
+    display: none !important;
+  }
+
+  #root > div,
+  .hub-surface,
+  .hub-subtle {
+    background: transparent !important;
+    background-color: transparent !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    min-height: auto !important;
+  }
+
+  #main-content {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  article {
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    font-family: Georgia, "Times New Roman", var(--font-body), serif;
+    font-size: 11pt;
+    line-height: 1.68;
+    color: #0f172a !important;
+  }
+
+  html[dir="rtl"] article {
+    font-family: var(--font-ar), "Amiri", "Traditional Arabic", serif;
+  }
+
+  article header,
+  article footer {
+    border-color: #cbd5e1 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  article h1,
+  article h2,
+  article h3 {
+    color: #000000 !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  article h1 {
+    font-size: 22pt !important;
+    line-height: 1.2 !important;
+    margin-bottom: 8pt !important;
+  }
+
+  article h2 {
+    font-size: 15pt !important;
+    line-height: 1.3 !important;
+    margin-top: 16pt !important;
+    margin-bottom: 6pt !important;
+  }
+
+  article h3 {
+    font-size: 12.5pt !important;
+    line-height: 1.35 !important;
+    margin-top: 12pt !important;
+    margin-bottom: 4pt !important;
+  }
+
+  article p,
+  article li {
+    font-size: 11pt !important;
+    line-height: 1.68 !important;
+    orphans: 3;
+    widows: 3;
+  }
+
+  article header p {
+    font-size: 12.5pt !important;
+    line-height: 1.5 !important;
+    color: #334155 !important;
+  }
+
+  article blockquote {
+    border-inline-start: 2pt solid #475569 !important;
+    color: #334155 !important;
+    padding-inline-start: 10pt !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  article pre {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    border: 1pt solid #cbd5e1 !important;
+    border-radius: 4pt !important;
+    padding: 8pt 10pt !important;
+    font-size: 9pt !important;
+    line-height: 1.45 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-x: visible !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  article code {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-size: 9.5pt !important;
+  }
+
+  article div:has(> img) {
+    aspect-ratio: auto !important;
+    height: auto !important;
+    background: transparent !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  article img {
+    max-height: 75mm !important;
+    width: 100% !important;
+    height: auto !important;
+    object-fit: cover;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  article a[href^="http"] {
+    color: #0f172a !important;
+    text-decoration: underline;
+  }
+
+  article a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-family: var(--font-mono), monospace;
+    font-size: 8.5pt;
+    color: #475569;
+    word-break: break-all;
+  }
+}
+

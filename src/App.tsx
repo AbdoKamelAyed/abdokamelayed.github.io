@@ -185,7 +185,6 @@ function AppContent() {
   return (
       <Layout
         section={route.section}
-        isArticleDetail={route.section === "journal" && Boolean(route.param)}
         lang={lang}
         theme={theme}
         glass={glass}

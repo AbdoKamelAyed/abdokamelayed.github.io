@@ -30,6 +30,96 @@
       "updatedAt": "2026-11-25T00:00:00Z",
       "status": "published",
       "source": "manual-editorial"
+    },
+    {
+      "id": "art-github-actions-telemetry-pipeline",
+      "slug": "normalizing-github-rest-and-graphql-telemetry-in-ci",
+      "type": "technical-notes",
+      "title": {
+        "en": "Normalizing GitHub REST and GraphQL Telemetry in Scheduled CI",
+        "ar": "توحيد بيانات GitHub عبر REST و GraphQL ضمن مهام CI المجدولة"
+      },
+      "subtitle": {
+        "en": "Building resilient static JSON feeds with graceful GraphQL fallback and rate-limit safety.",
+        "ar": "بناء خلاصات JSON ثابتة ومرنة مع تراجع آمن عند غياب توكن GraphQL."
+      },
+      "content": {
+        "en": "Public GitHub REST endpoints cover repositories, language byte breakdowns, release tags, and recent events without requiring personal tokens.\n\nWhen an optional metrics token is available in CI, a targeted GraphQL query enriches the archive with contribution calendar heatmaps and streak totals. When it is absent, the collector marks contribution calendars cleanly as unavailable rather than inventing estimates.\n\nKeeping collection and normalization in a standalone Node script guarantees reproducible JSON artifacts across local runs and GitHub Actions.",
+        "ar": "توفر واجهات GitHub REST العامة بيانات المستودعات وتوزيع اللغات والإصدارات والأحداث الأخيرة دون الحاجة إلى رموز وصول شخصية.\n\nوعند توفر رمز اختياري في بيئة التكامل المستمر، يضيف استعلام GraphQL تقويم المساهمات وسلاسل النشاط بدقة، بينما يتراجع النظام بأمان عند غيابه دون افتراض أرقام غير حقيقية.\n\nيساعد فصل الجمع والمعالجة في سكربت Node مستقل على ضمان مخرجات JSON موثوقة ومتسقة."
+      },
+      "coverImage": "/src/assets/images/project_systems_architecture_1795599465444.jpg",
+      "publishedAt": "2026-11-22",
+      "categories": ["technical-notes", "development-logs"],
+      "tags": ["github-actions", "architecture", "automation"],
+      "readingTimeMinutes": 2,
+      "featured": false,
+      "seo": {
+        "description": "How scheduled GitHub Actions jobs normalize REST and GraphQL telemetry into static JSON."
+      },
+      "createdAt": "2026-11-22T00:00:00Z",
+      "updatedAt": "2026-11-22T00:00:00Z",
+      "status": "published",
+      "source": "manual-editorial"
+    },
+    {
+      "id": "art-schema-validation-static-hubs",
+      "slug": "strict-json-schema-validation-for-static-portfolios",
+      "type": "development-logs",
+      "title": {
+        "en": "Strict JSON Schema Validation and Secret Scanning Before Pages Deploy",
+        "ar": "التحقق الصارم من مخططات JSON وفحص الأسرار قبل النشر على Pages"
+      },
+      "subtitle": {
+        "en": "Catching malformed collections, duplicate IDs, and accidental tokens in automated pre-deploy gates.",
+        "ar": "اكتشاف المخططات غير الصالحة والمعرفات المكررة والرموز العرضية آلياً قبل النشر."
+      },
+      "content": {
+        "en": "When a static site treats JSON files as its primary database, a single malformed object or duplicate record ID can silently break downstream views.\n\nRunning a deterministic schema validator alongside TypeScript checks in CI verifies every collection file under public/data before Vite bundles the application.\n\nIn addition to structural checks, scanning datasets against common token prefixes enforces strict separation between public static assets and repository secrets.",
+        "ar": "عندما يعتمد الموقع الثابت على ملفات JSON كقاعدة بيانات أساسية، قد يؤدي خطأ بسيط في البنية أو تكرار المعرفات إلى تعطل العرض.\n\nيضمن تشغيل أداة التحقق من المخططات بالتوازي مع فحص TypeScript قبل البناء سلامة جميع الملفات تحت public/data.\n\nكما يمنع فحص أنماط الرموز السرية تسرب أي بيانات حساسة إلى الحزمة المنشورة."
+      },
+      "coverImage": "/src/assets/images/abdo_editorial_workspace_1795599463678.jpg",
+      "publishedAt": "2026-11-18",
+      "categories": ["development-logs", "articles"],
+      "tags": ["github-pages", "github-actions", "architecture"],
+      "readingTimeMinutes": 2,
+      "featured": false,
+      "seo": {
+        "description": "Pre-deploy JSON schema verification and secret hygiene for static GitHub Pages workflows."
+      },
+      "createdAt": "2026-11-18T00:00:00Z",
+      "updatedAt": "2026-11-18T00:00:00Z",
+      "status": "published",
+      "source": "manual-editorial"
+    },
+    {
+      "id": "art-bilingual-rtl-engineering-systems",
+      "slug": "designing-bilingual-ltr-rtl-developer-interfaces",
+      "type": "articles",
+      "title": {
+        "en": "Designing Bilingual LTR/RTL Engineering Interfaces Without Layout Drift",
+        "ar": "تصميم واجهات هندسية ثنائية اللغة LTR/RTL دون انزياح التخطيط"
+      },
+      "subtitle": {
+        "en": "Using logical CSS properties, bidirectional isolates, and paired typography for English and Arabic.",
+        "ar": "استخدام الخصائص المنطقية وعزل الاتجاه وتنسيق الخطوط بين العربية والإنجليزية."
+      },
+      "content": {
+        "en": "Bilingual technical platforms need more than translated strings: dates, repository handles, metrics, and navigation rhythm all behave differently between LTR English and RTL Arabic.\n\nWrapping technical identifiers such as GitHub handles in explicit LTR spans prevents punctuation reordering in RTL paragraphs, while logical spacing utilities preserve balanced margins.\n\nPairing clean Latin display typography with Cairo ensures consistent visual weight across both languages.",
+        "ar": "تتطلب المنصات التقنية ثنائية اللغة أكثر من مجرد ترجمة النصوص، فالتواريخ والمعرفات البرمجية والأرقام تتطلب عناية خاصة بين الإنجليزية والعربية.\n\nيساعد تغليف المعرفات التقنية مثل أسماء حسابات GitHub بنطاقات LTR صريحة في منع انقلاب علامات الترقيم داخل الفقرات العربية.\n\nكما يضمن تنسيق الخطوط المتوازن بين اللاتينية وCairo وضوحاً بصرياً متناسقاً في كلا الاتجاهين."
+      },
+      "coverImage": "/src/assets/images/journal_editorial_cover_1795599465037.jpg",
+      "publishedAt": "2026-11-14",
+      "categories": ["articles", "technical-notes"],
+      "tags": ["architecture", "github-pages", "typescript"],
+      "readingTimeMinutes": 2,
+      "featured": false,
+      "seo": {
+        "description": "Practical guidelines for building bilingual English/Arabic engineering dashboards."
+      },
+      "createdAt": "2026-11-14T00:00:00Z",
+      "updatedAt": "2026-11-14T00:00:00Z",
+      "status": "published",
+      "source": "manual-editorial"
     }
   ],
   "createdAt": "2026-11-25T00:00:00Z",

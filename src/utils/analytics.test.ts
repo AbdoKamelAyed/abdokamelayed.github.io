@@ -1,18 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  calculateArticleScrollProgress,
   calculateReadingTimeMinutes,
   countWords,
   filterAndSortProjects,
   filterAndSortRepos,
   formatBytesCompact,
+  getRelatedArticles,
   safeUrl,
   searchDocuments,
   slugify,
   summarizeMonthlyContributions,
   validateCollectionSchema,
 } from "./analytics";
-import type { GitHubContributions, GitHubRepo, ProjectRecord } from "../types/hub";
+import { hashPassphrase } from "./adminAuth";
+import { parseMarkdownBlocks, tokenizeInlineMarkdown } from "./markdown";
+import type { ArticleRecord, GitHubContributions, GitHubRepo, ProjectRecord } from "../types/hub";
 
 test("safeUrl allows safe schemes and blocks javascript/data URIs", () => {
   assert.equal(safeUrl("https://github.com/AbdoKamelAyed"), "https://github.com/AbdoKamelAyed");
@@ -187,4 +191,72 @@ test("countWords and calculateReadingTimeMinutes compute reading time at 200 WPM
   assert.equal(calculateReadingTimeMinutes(Array(200).fill("word").join(" ")), 1);
   assert.equal(calculateReadingTimeMinutes(Array(201).fill("word").join(" ")), 2);
   assert.equal(calculateReadingTimeMinutes(Array(650).fill("كلمة").join(" ")), 4);
+});
+
+test("calculateArticleScrollProgress maps article scroll position to 0-100 percentage", () => {
+  assert.equal(calculateArticleScrollProgress(0, 1500, 900, 1800), 0);
+  assert.equal(calculateArticleScrollProgress(300, 1500, 900, 1800), 50);
+  assert.equal(calculateArticleScrollProgress(600, 1500, 900, 1800), 100);
+  assert.equal(calculateArticleScrollProgress(900, 1500, 900, 1800), 100);
+  assert.equal(calculateArticleScrollProgress(0, 700, 900, 900), 0);
+});
+
+test("getRelatedArticles suggests up to 3 articles sharing tags or categories ranked by overlap", () => {
+  const makeArt = (
+    id: string,
+    type: string,
+    categories: string[],
+    tags: string[],
+    publishedAt: string
+  ): ArticleRecord => ({
+    id,
+    slug: id,
+    type,
+    title: { en: id, ar: id },
+    subtitle: { en: "", ar: "" },
+    content: { en: "word ".repeat(50), ar: "كلمة ".repeat(50) },
+    publishedAt,
+    categories,
+    tags,
+    readingTimeMinutes: 1,
+    featured: false,
+    createdAt: "2026-11-25T00:00:00Z",
+    updatedAt: "2026-11-25T00:00:00Z",
+    status: "published",
+    source: "manual",
+  });
+
+  const base = makeArt("base", "development-logs", ["development-logs"], ["architecture", "github-actions"], "2026-11-25");
+  const list = [
+    base,
+    makeArt("a1", "technical-notes", ["technical-notes"], ["architecture", "github-actions"], "2026-11-20"),
+    makeArt("a2", "development-logs", ["development-logs"], ["typescript"], "2026-11-24"),
+    makeArt("a3", "articles", ["articles"], ["architecture"], "2026-11-22"),
+    makeArt("a4", "development-logs", ["development-logs"], ["github-actions", "ci"], "2026-11-23"),
+    makeArt("unrelated", "tutorials", ["tutorials"], ["css"], "2026-11-25"),
+  ];
+
+  const related = getRelatedArticles(base, list, 3);
+  assert.equal(related.length, 3);
+  assert.deepEqual(related.map((r) => r.id), ["a1", "a4", "a3"]);
+  assert.equal(related.some((r) => r.id === "base" || r.id === "unrelated"), false);
+});
+
+test("parseMarkdownBlocks parses headings, lists, quotes, code fences, and inline tokens", () => {
+  const md = "## Architecture\n\n> Clean separation.\n\n- Item **one**\n- Item [two](https://abdokamelayed.github.io)\n\n```ts\nconst x = 1;\n```";
+  const blocks = parseMarkdownBlocks(md);
+  assert.deepEqual(blocks.map((b) => b.type), ["h2", "blockquote", "ul", "code"]);
+  const tokens = tokenizeInlineMarkdown("Hello **bold** and `code`");
+  assert.equal(tokens.length, 4);
+  assert.equal(tokens[1].type, "bold");
+  assert.equal(tokens[3].type, "code");
+});
+
+test("hashPassphrase produces deterministic salted SHA-256 hex digests", async () => {
+  const h1 = await hashPassphrase("secret-pass", "salt123");
+  const h2 = await hashPassphrase("secret-pass", "salt123");
+  const h3 = await hashPassphrase("secret-pass", "different-salt");
+  assert.equal(h1.length, 64);
+  assert.equal(h1, h2);
+  assert.notEqual(h1, h3);
 });

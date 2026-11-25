@@ -92,3 +92,16 @@ export function formatDate(iso: string | null | undefined, lang: Lang): string {
     day: "numeric",
   }).format(d);
 }
+
+export function formatDateTime(iso: string | null | undefined, lang: Lang): string {
+  if (!iso) return t("common.na", lang);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return t("common.na", lang);
+  const hasExplicitTime = /T\d{2}:\d{2}/.test(iso);
+  return new Intl.DateTimeFormat(lang === "ar" ? "ar-EG" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    ...(hasExplicitTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+  }).format(d);
+}

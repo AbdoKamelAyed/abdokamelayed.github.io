@@ -241,4 +241,48 @@ export function calculateReadingTimeMinutes(
   return Math.max(1, Math.ceil(words / wordsPerMinute));
 }
 
+export function calculateArticleScrollProgress(
+  scrollY: number,
+  articleBottomInDoc: number,
+  viewportHeight: number,
+  documentScrollHeight: number
+): number {
+  const docMax = Math.max(0, documentScrollHeight - viewportHeight);
+  const articleMax = Math.max(0, articleBottomInDoc - viewportHeight);
+  const targetMax = articleMax > 0 ? Math.min(articleMax, docMax || articleMax) : docMax;
+  if (targetMax <= 0) return 0;
+  const clamped = Math.max(0, Math.min(1, scrollY / targetMax));
+  return Math.round(clamped * 100);
+}
+
+export function getRelatedArticles(
+  article: ArticleRecord,
+  articles: ArticleRecord[],
+  limit = 3
+): ArticleRecord[] {
+  const targetTags = new Set(article.tags || []);
+  const targetCats = new Set([...(article.categories || []), article.type].filter(Boolean));
+
+  return articles
+    .filter((candidate) => candidate.id !== article.id)
+    .map((candidate) => {
+      const candidateCats = new Set([...(candidate.categories || []), candidate.type].filter(Boolean));
+      const sharedTags = (candidate.tags || []).filter((tag) => targetTags.has(tag)).length;
+      let sharedCategories = 0;
+      for (const cat of candidateCats) {
+        if (targetCats.has(cat)) sharedCategories += 1;
+      }
+      const score = sharedTags * 2 + sharedCategories;
+      return { candidate, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        (b.candidate.publishedAt || "").localeCompare(a.candidate.publishedAt || "")
+    )
+    .slice(0, limit)
+    .map((entry) => entry.candidate);
+}
+
 export type { ExperienceDataset, KnowledgeEntry };
