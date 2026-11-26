@@ -246,7 +246,7 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
                 </div>
 
                 {r.topics.length > 0 && (
-                  <div className="text-xs font-mono text-blue-600 dark:text-blue-400">
+                  <div className="text-xs font-mono text-[var(--hub-secondary)]">
                     {r.topics.map((tp) => `#${tp}`).join(" · ")}
                   </div>
                 )}

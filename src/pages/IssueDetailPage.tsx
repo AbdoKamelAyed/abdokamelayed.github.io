@@ -6,6 +6,7 @@ import { formatDate, L, loc, t } from "../utils/i18n";
 import { calculateIssueStats, formatCadenceLabel, resolveIssueArticles } from "../utils/issues";
 import { buildIssuePdfInput, generatePdfBytes, triggerPdfDownload } from "../utils/pdfMaker";
 import { AuthorAvatar, AuthorProfileCard } from "../components/AuthorProfileCard";
+import { ReadingProgressBar } from "../components/ReadingProgressBar";
 import { RichContentView } from "../components/RichContentView";
 
 export const IssueDetailPage: React.FC<{
@@ -17,6 +18,7 @@ export const IssueDetailPage: React.FC<{
   const issue = data.issues.find((i) => i.slug === target || i.id === target);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
   const lastTriggerRef = useRef<HTMLElement | null>(null);
+  const chaptersRef = useRef<HTMLDivElement | null>(null);
 
   const issueArticles = useMemo(
     () => (issue ? resolveIssueArticles(issue, data.articles) : []),
@@ -79,6 +81,14 @@ export const IssueDetailPage: React.FC<{
 
   return (
     <div className="space-y-12 issue-edition-sheet">
+      {data.website.showReadingProgress !== false && (
+        <ReadingProgressBar
+          targetRef={chaptersRef}
+          contentKey={issue.id}
+          label={L("Journal issue reading progress", "تقدم قراءة العدد", lang)}
+        />
+      )}
+
       <div className="print:hidden flex flex-wrap items-center justify-between gap-4">
         <a
           href="#/journal/issues"
@@ -113,7 +123,7 @@ export const IssueDetailPage: React.FC<{
       <header className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center border-b border-[var(--hub-border)] pb-10">
         <div className="lg:col-span-7 space-y-4">
           <div className="text-xs font-mono text-[var(--hub-text-muted)] flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-blue-600 dark:text-blue-400">{issue.issueNumber}</span>
+            <span className="font-semibold text-[var(--hub-secondary)]">{issue.issueNumber}</span>
             <span aria-hidden="true">·</span>
             <span>{formatCadenceLabel(issue.cadence, lang)}</span>
             <span aria-hidden="true">·</span>
@@ -146,7 +156,7 @@ export const IssueDetailPage: React.FC<{
 
           {loc(issue.editorialNote, lang) && (
             <aside className="mt-4 rounded-xl border border-[var(--hub-border)] hub-subtle p-4 space-y-1">
-              <div className="text-[11px] font-mono uppercase tracking-wider text-blue-600 dark:text-blue-400">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-[var(--hub-secondary)]">
                 {L("Editorial Foreword", "افتتاحية العدد", lang)}
               </div>
               <p className="text-sm leading-relaxed">{loc(issue.editorialNote, lang)}</p>
@@ -171,7 +181,7 @@ export const IssueDetailPage: React.FC<{
       >
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <BookOpen className="w-4 h-4 text-[var(--hub-secondary)]" />
             <span>{L("Inside This Edition", "محتويات هذا العدد", lang)}</span>
           </h2>
           {issue.topics.length > 0 && (
@@ -192,9 +202,9 @@ export const IssueDetailPage: React.FC<{
                     e.preventDefault();
                     document.getElementById(`chapter-${art.id}`)?.scrollIntoView({ behavior: "smooth" });
                   }}
-                  className="text-sm font-semibold hover:text-blue-600 dark:hover:text-blue-400 flex items-baseline gap-2.5 cursor-pointer"
+                  className="text-sm font-semibold hover:text-[var(--hub-secondary)] flex items-baseline gap-2.5 cursor-pointer"
                 >
-                  <span className="font-mono text-xs text-blue-600 dark:text-blue-400 tabular-nums">
+                  <span className="font-mono text-xs text-[var(--hub-secondary)] tabular-nums">
                     {String(idx + 1).padStart(2, "0")}
                   </span>
                   <span>{loc(art.title, lang)}</span>
@@ -209,7 +219,7 @@ export const IssueDetailPage: React.FC<{
       </nav>
 
       {/* Bound Sequential Chapters */}
-      <div className="space-y-16">
+      <div ref={chaptersRef} className="space-y-16">
         {issueArticles.map((art, idx) => {
           const content = loc(art.content, lang);
           const readMin = calculateReadingTimeMinutes(content);
@@ -224,13 +234,13 @@ export const IssueDetailPage: React.FC<{
             >
               <header className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-[var(--hub-text-muted)]">
-                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  <span className="font-semibold text-[var(--hub-secondary)]">
                     {L("Chapter", "الفصل", lang)} {String(idx + 1).padStart(2, "0")} · {art.type}
                   </span>
                   <div className="flex items-center gap-3 print:hidden">
                     <a
                       href={`#/journal/${encodeURIComponent(art.slug || art.id)}`}
-                      className="text-blue-600 dark:text-blue-400 hover:underline"
+                      className="text-[var(--hub-secondary)] hover:underline"
                     >
                       {L("Standalone View →", "فتح منفرداً ←", lang)}
                     </a>

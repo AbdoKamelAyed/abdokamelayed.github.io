@@ -81,7 +81,7 @@ export const HomePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
           <h2 id="home-stats-heading" className="font-display text-xl font-semibold">
             {t("home.githubStats", lang)}
           </h2>
-          <a href="#/github" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+          <a href="#/github" className="text-sm font-medium text-[var(--hub-secondary)] hover:underline">
             {t("common.viewAll", lang)}
           </a>
         </div>
@@ -119,7 +119,7 @@ export const HomePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
           <h2 id="home-projects-heading" className="font-display text-xl font-semibold">
             {t("home.featuredProjects", lang)}
           </h2>
-          <a href="#/projects" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+          <a href="#/projects" className="text-sm font-medium text-[var(--hub-secondary)] hover:underline">
             {t("common.viewAll", lang)}
           </a>
         </div>
@@ -144,7 +144,7 @@ export const HomePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
         <div className="lg:col-span-7 rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
           <div className="flex items-baseline justify-between gap-4">
             <h2 className="font-display text-xl font-semibold">{t("home.recentGithub", lang)}</h2>
-            <a href="#/github" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+            <a href="#/github" className="text-sm font-medium text-[var(--hub-secondary)] hover:underline">
               {t("common.viewAll", lang)}
             </a>
           </div>
@@ -214,7 +214,7 @@ export const HomePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
           <h2 id="home-journal-heading" className="font-display text-xl font-semibold">
             {t("home.latestJournal", lang)}
           </h2>
-          <a href="#/journal" className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+          <a href="#/journal" className="text-sm font-medium text-[var(--hub-secondary)] hover:underline">
             {t("common.viewAll", lang)}
           </a>
         </div>

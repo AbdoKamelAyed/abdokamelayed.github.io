@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildSearchIndex,
   calculateArticleScrollProgress,
   calculateReadingTimeMinutes,
+  calculateScrollProgressState,
   countWords,
   extractArticleSummary,
   filterAndSortProjects,
@@ -30,6 +32,31 @@ import {
 import { generatePdfBytes } from "./pdfMaker";
 import { analyzeSeoAudit, generateRobotsTxt, generateSitemapXml } from "./seoEngine";
 import { extractTableOfContents, parseMarkdownBlocks, tokenizeInlineMarkdown } from "./markdown";
+import {
+  DEFAULT_DESIGN_THEME_ID,
+  DESIGN_THEMES,
+  getDesignThemeById,
+  getPairedPolarityThemeId,
+} from "./designThemes";
+import {
+  canStepFontScale,
+  DEFAULT_FONT_SCALE,
+  FONT_SCALES,
+  getFontScaleDefinition,
+  getFontScaleLabel,
+  getNextFontScale,
+  normalizeFontScale,
+  stepFontScale,
+} from "./typography";
+import { buildBreadcrumbs } from "./breadcrumbs";
+import { resolveSkeletonVariant } from "./skeletons";
+import { normalizeCodeLanguage, tokenizeCode, tokenizeCodeLine } from "./codeHighlight";
+import { computeAdminChartMetrics } from "./adminAnalytics";
+import {
+  buildGitHubRawUrl,
+  sanitizeRepoStoragePath,
+  validateGitHubRepoTarget,
+} from "../services/githubStorageService";
 import type { ArticleRecord, GitHubContributions, GitHubRepo, HubDatasets, ProjectRecord } from "../types/hub";
 
 test("safeUrl allows safe schemes and blocks javascript/data URIs", () => {
@@ -207,12 +234,21 @@ test("countWords and calculateReadingTimeMinutes compute reading time at 200 WPM
   assert.equal(calculateReadingTimeMinutes(Array(650).fill("كلمة").join(" ")), 4);
 });
 
-test("calculateArticleScrollProgress maps article scroll position to 0-100 percentage", () => {
+test("calculateArticleScrollProgress and calculateScrollProgressState map scroll position and scrollability", () => {
   assert.equal(calculateArticleScrollProgress(0, 1500, 900, 1800), 0);
   assert.equal(calculateArticleScrollProgress(300, 1500, 900, 1800), 50);
   assert.equal(calculateArticleScrollProgress(600, 1500, 900, 1800), 100);
   assert.equal(calculateArticleScrollProgress(900, 1500, 900, 1800), 100);
   assert.equal(calculateArticleScrollProgress(0, 700, 900, 900), 0);
+
+  assert.deepEqual(calculateScrollProgressState(0, 700, 900, 900), {
+    progress: 0,
+    scrollable: false,
+  });
+  assert.deepEqual(calculateScrollProgressState(450, 2400, 900, 2600), {
+    progress: 30,
+    scrollable: true,
+  });
 });
 
 test("getRelatedArticles suggests up to 3 articles sharing tags or categories ranked by overlap", () => {
@@ -454,6 +490,351 @@ test("PDF Maker generates valid PDF 1.4 binary bytes and SEO Engine emits XML si
   assert.equal(xml.includes("<urlset"), true);
   assert.equal(generateRobotsTxt(mockData.website.domain).includes("Sitemap: https://abdokamelayed.github.io/sitemap.xml"), true);
 });
+
+test("15 Design Directions registry provides 15 unique, valid, contrast-paired themes", () => {
+  assert.equal(DESIGN_THEMES.length, 15);
+  const ids = new Set(DESIGN_THEMES.map((t) => t.id));
+  const orders = new Set(DESIGN_THEMES.map((t) => t.order));
+  assert.equal(ids.size, 15);
+  assert.equal(orders.size, 15);
+
+  const hexPattern = /^#[0-9a-f]{6}$/i;
+  for (const theme of DESIGN_THEMES) {
+    assert.ok(theme.name.en && theme.name.ar);
+    assert.ok(theme.directionGuide.en.length > 20 && theme.directionGuide.ar.length > 15);
+    assert.ok(hexPattern.test(theme.tokens.bg));
+    assert.ok(hexPattern.test(theme.tokens.surfaceElevated));
+    assert.ok(hexPattern.test(theme.tokens.text));
+    assert.ok(hexPattern.test(theme.tokens.secondary));
+
+    const opposite = theme.polarity === "dark" ? "light" : "dark";
+    const paired = getDesignThemeById(getPairedPolarityThemeId(theme.id, opposite));
+    assert.equal(paired.polarity, opposite);
+  }
+
+  assert.equal(getDesignThemeById("non-existent-id").id, DEFAULT_DESIGN_THEME_ID);
+});
+
+test("Font scale helpers normalize inputs and cycle small -> medium -> large -> small", () => {
+  assert.equal(normalizeFontScale(null), DEFAULT_FONT_SCALE);
+  assert.equal(normalizeFontScale("invalid"), "medium");
+  assert.equal(normalizeFontScale("small"), "small");
+  assert.equal(normalizeFontScale("large"), "large");
+
+  assert.equal(getNextFontScale("small"), "medium");
+  assert.equal(getNextFontScale("medium"), "large");
+  assert.equal(getNextFontScale("large"), "small");
+
+  assert.equal(FONT_SCALES.small.rootFontSizePx < FONT_SCALES.medium.rootFontSizePx, true);
+  assert.equal(FONT_SCALES.medium.rootFontSizePx < FONT_SCALES.large.rootFontSizePx, true);
+  assert.equal(getFontScaleDefinition("large").rootFontSizePx, 18);
+  assert.equal(getFontScaleLabel("small", "en"), "Small");
+  assert.equal(getFontScaleLabel("large", "ar"), "كبير");
+});
+
+test("buildSearchIndex and searchDocuments rank title hits first and support multi-word queries across articles, projects, knowledge, and issues", () => {
+  const sampleHub = {
+    projects: [
+      {
+        id: "proj-portal",
+        slug: "suefco-portal",
+        name: { en: "Architecture Hub Portal", ar: "بوابة" },
+        shortDescription: { en: "Modular frontend system", ar: "نظام" },
+        fullDescription: { en: "Detailed portal implementation notes", ar: "تفاصيل" },
+        category: "web-applications",
+        status: "Active",
+        featured: true,
+        sortOrder: 1,
+        techStack: ["TypeScript", "React"],
+        createdAt: "",
+        updatedAt: "",
+        source: "manual",
+      },
+    ],
+    articles: [
+      {
+        id: "art-body",
+        slug: "deploy-log",
+        type: "development-logs",
+        title: { en: "Deployment Notes", ar: "ملاحظات" },
+        subtitle: { en: "Static releases", ar: "إصدارات" },
+        abstract: { en: "Notes on zero-backend pages deployment.", ar: "ملخص" },
+        content: { en: "We use a clean architecture pattern for pages.", ar: "محتوى" },
+        publishedAt: "2026-11-25",
+        categories: ["development-logs"],
+        tags: ["ci"],
+        readingTimeMinutes: 2,
+        featured: false,
+        createdAt: "",
+        updatedAt: "",
+        status: "published",
+        source: "manual",
+      },
+      {
+        id: "art-title",
+        slug: "architecture-manifesto",
+        type: "articles",
+        title: { en: "System Architecture Guide", ar: "دليل المعمارية" },
+        subtitle: { en: "Zero-backend pages", ar: "صفحات" },
+        content: { en: "Deep dive into modular static hubs.", ar: "شرح" },
+        publishedAt: "2026-11-24",
+        categories: ["articles"],
+        tags: ["architecture"],
+        readingTimeMinutes: 3,
+        featured: true,
+        createdAt: "",
+        updatedAt: "",
+        status: "published",
+        source: "manual",
+      },
+    ],
+    knowledge: [
+      {
+        id: "know-1",
+        title: { en: "Incremental Simplicity", ar: "البساطة التدريجية" },
+        summary: { en: "Design systems with clear boundaries and architecture.", ar: "ملخص" },
+        category: "systems-engineering",
+        entryType: "principle",
+        tags: ["architecture", "design"],
+        sourceAttribution: "Internal Handbook",
+        createdAt: "",
+        updatedAt: "",
+        status: "active",
+        source: "manual",
+      },
+    ],
+    issues: [
+      {
+        id: "iss-1",
+        slug: "edition-01",
+        issueNumber: "ISSUE #01",
+        title: { en: "November Architecture Digest", ar: "نشرة" },
+        subtitle: { en: "Monthly compilation", ar: "تجميع" },
+        cadence: "monthly",
+        selectionMode: "period",
+        periodKey: "2026-11",
+        articleIds: ["art-title"],
+        topics: ["architecture"],
+        editorialNote: { en: "Curated monthly readings.", ar: "قراءات" },
+        publishedAt: "2026-11-25",
+        createdAt: "",
+        updatedAt: "",
+        status: "published",
+        source: "manual",
+      },
+    ],
+    github: { repositories: [] },
+    experience: { items: [] },
+  } as unknown as HubDatasets;
+
+  const index = buildSearchIndex(sampleHub, "en");
+  assert.equal(index.length, 5);
+
+  // Title match ("System Architecture Guide") must outrank body-only match ("Deployment Notes")
+  const archHits = searchDocuments(index, "architecture", "all");
+  assert.equal(archHits.length, 5);
+  assert.equal(archHits[0].title.includes("Architecture"), true);
+  assert.equal(archHits[archHits.length - 1].id, "art-body");
+
+  // Multi-word AND query matching across abstract/subtitle & body
+  const multiWord = searchDocuments(index, "zero-backend pages", "article");
+  assert.equal(multiWord.length, 2);
+  assert.equal(multiWord[0].id, "art-title");
+
+  // Category filtering works for knowledge & issues
+  const knowHits = searchDocuments(index, "simplicity", "knowledge");
+  assert.equal(knowHits.length, 1);
+  assert.equal(knowHits[0].route, "#/knowledge");
+
+  const issueHits = searchDocuments(index, "november", "issue");
+  assert.equal(issueHits.length, 1);
+  assert.equal(issueHits[0].route, "#/journal/issues/edition-01");
+});
+
+test("buildBreadcrumbs builds dynamic bilingual hierarchy trails for sections, projects, articles, and journal issues", () => {
+  const hub = {
+    projects: [
+      {
+        id: "p1",
+        slug: "abdo-hub",
+        name: { en: "ABDO Hub", ar: "منصة عبدو" },
+      },
+    ],
+    articles: [
+      {
+        id: "a1",
+        slug: "zero-backend-pages",
+        title: { en: "Zero-Backend Architecture", ar: "معمارية بدون خادم" },
+      },
+    ],
+    issues: [
+      {
+        id: "i1",
+        slug: "week-48",
+        issueNumber: "ED. 03",
+        title: { en: "Modular Systems Digest", ar: "نشرة الأنظمة" },
+      },
+    ],
+  } as unknown as HubDatasets;
+
+  // Home omits breadcrumb trail
+  assert.deepEqual(buildBreadcrumbs({ section: "home" }, hub, "en"), []);
+
+  // Top-level section
+  assert.deepEqual(buildBreadcrumbs({ section: "projects" }, hub, "en"), [
+    { id: "home", label: "Home", href: "#/", current: false },
+    { id: "projects", label: "Projects", href: "#/projects", current: true },
+  ]);
+
+  // Project detail resolves localized title
+  assert.deepEqual(buildBreadcrumbs({ section: "projects", param: "abdo-hub" }, hub, "en"), [
+    { id: "home", label: "Home", href: "#/", current: false },
+    { id: "projects", label: "Projects", href: "#/projects", current: false },
+    { id: "project-abdo-hub", label: "ABDO Hub", href: "#/projects/abdo-hub", current: true },
+  ]);
+
+  // Article detail
+  assert.deepEqual(buildBreadcrumbs({ section: "journal", param: "zero-backend-pages" }, hub, "en"), [
+    { id: "home", label: "Home", href: "#/", current: false },
+    { id: "journal", label: "Journal", href: "#/journal", current: false },
+    { id: "article-zero-backend-pages", label: "Zero-Backend Architecture", href: "#/journal/zero-backend-pages", current: true },
+  ]);
+
+  // Journal Issues index & nested Issue Edition in Arabic (RTL)
+  assert.deepEqual(buildBreadcrumbs({ section: "journal", param: "issues" }, hub, "ar"), [
+    { id: "home", label: "الرئيسية", href: "#/", current: false },
+    { id: "journal", label: "المدونة", href: "#/journal", current: false },
+    { id: "journal-issues", label: "الأعداد والإصدارات", href: "#/journal/issues", current: true },
+  ]);
+
+  assert.deepEqual(buildBreadcrumbs({ section: "journal", param: "issues", subParam: "week-48" }, hub, "ar"), [
+    { id: "home", label: "الرئيسية", href: "#/", current: false },
+    { id: "journal", label: "المدونة", href: "#/journal", current: false },
+    { id: "journal-issues", label: "الأعداد والإصدارات", href: "#/journal/issues", current: false },
+    { id: "issue-week-48", label: "ED. 03 — نشرة الأنظمة", href: "#/journal/issues/week-48", current: true },
+  ]);
+
+  // Unknown or malformed encoded param falls back cleanly without throwing
+  const fallback = buildBreadcrumbs({ section: "journal", param: "%E0%A4%A" }, hub, "en");
+  assert.equal(fallback.length, 3);
+  assert.equal(fallback[2].label, "%E0%A4%A");
+  assert.equal(fallback[2].current, true);
+});
+
+test("resolveSkeletonVariant maps every route and sub-route to a dedicated section skeleton", () => {
+  assert.equal(resolveSkeletonVariant({ section: "home" }), "home");
+  assert.equal(resolveSkeletonVariant({ section: "projects" }), "projects-grid");
+  assert.equal(resolveSkeletonVariant({ section: "projects", param: "abdo-hub" }), "project-detail");
+  assert.equal(resolveSkeletonVariant({ section: "journal" }), "journal-list");
+  assert.equal(resolveSkeletonVariant({ section: "journal", param: "zero-backend" }), "article-detail");
+  assert.equal(resolveSkeletonVariant({ section: "journal", param: "issues" }), "journal-issues");
+  assert.equal(resolveSkeletonVariant({ section: "journal", param: "issues", subParam: "week-48" }), "issue-detail");
+  assert.equal(resolveSkeletonVariant({ section: "github" }), "github");
+  assert.equal(resolveSkeletonVariant({ section: "work" }), "work");
+  assert.equal(resolveSkeletonVariant({ section: "knowledge" }), "knowledge");
+  assert.equal(resolveSkeletonVariant({ section: "about" }), "about");
+  assert.equal(resolveSkeletonVariant({ section: "contact" }), "contact");
+  assert.equal(resolveSkeletonVariant({ section: "admin" }), "admin");
+});
+
+test("stepFontScale and canStepFontScale clamp cleanly at small and large bounds", () => {
+  assert.equal(stepFontScale("small", -1), "small");
+  assert.equal(stepFontScale("small", 1), "medium");
+  assert.equal(stepFontScale("medium", 1), "large");
+  assert.equal(stepFontScale("large", 1), "large");
+  assert.equal(stepFontScale("large", -1), "medium");
+
+  assert.equal(canStepFontScale("small", -1), false);
+  assert.equal(canStepFontScale("small", 1), true);
+  assert.equal(canStepFontScale("medium", -1), true);
+  assert.equal(canStepFontScale("medium", 1), true);
+  assert.equal(canStepFontScale("large", 1), false);
+  assert.equal(canStepFontScale("large", -1), true);
+});
+
+test("tokenizeCode highlights keywords, strings, numbers, multi-line block comments, Python comments, and JSON property keys", () => {
+  assert.equal(normalizeCodeLanguage("tsx"), "typescript");
+  assert.equal(normalizeCodeLanguage("sh"), "bash");
+
+  const tsResult = tokenizeCode('/* header\n   note */\nconst total: number = 42;\nreturn "ok";', "ts");
+  assert.equal(tsResult.normalizedLanguage, "typescript");
+  assert.equal(tsResult.lines.length, 4);
+  assert.equal(tsResult.lines[0][0].type, "comment");
+  assert.equal(tsResult.lines[1][0].type, "comment");
+  assert.equal(tsResult.lines[2].some((t) => t.type === "keyword" && t.value === "const"), true);
+  assert.equal(tsResult.lines[2].some((t) => t.type === "type" && t.value === "number"), true);
+  assert.equal(tsResult.lines[2].some((t) => t.type === "number" && t.value === "42"), true);
+  assert.equal(tsResult.lines[3].some((t) => t.type === "string" && t.value === '"ok"'), true);
+
+  const pyTokens = tokenizeCodeLine("def sync(): # comment", "python");
+  assert.equal(pyTokens.some((t) => t.type === "keyword" && t.value === "def"), true);
+  assert.equal(pyTokens.some((t) => t.type === "function" && t.value === "sync"), true);
+  assert.equal(pyTokens.some((t) => t.type === "comment" && t.value === "# comment"), true);
+
+  const jsonTokens = tokenizeCodeLine('  "siteName": "ABDO Hub"', "json");
+  assert.equal(jsonTokens.some((t) => t.type === "property" && t.value === '"siteName"'), true);
+  assert.equal(jsonTokens.some((t) => t.type === "string" && t.value === '"ABDO Hub"'), true);
+});
+
+test("computeAdminChartMetrics aggregates timeline, media mix, top repos, and publish health", () => {
+  const sample = {
+    allArticlesRaw: [
+      { id: "a1", publishedAt: "2026-10-12", createdAt: "2026-10-12", status: "published" },
+      { id: "a2", publishedAt: "2026-11-05", createdAt: "2026-11-05", status: "draft" },
+    ],
+    projects: [
+      { id: "p1", createdAt: "2026-11-01", updatedAt: "2026-11-10", status: "Active" },
+    ],
+    allIssuesRaw: [
+      { id: "i1", publishedAt: "2026-11-20", createdAt: "2026-11-20", status: "published" },
+    ],
+    allKnowledgeRaw: [
+      { id: "k1", createdAt: "2026-11-22", updatedAt: "2026-11-22", status: "published" },
+    ],
+    mediaAssets: [
+      { id: "m1", mediaType: "pdf", sizeBytes: 1000 },
+      { id: "m2", mediaType: "code", sizeBytes: 500 },
+    ],
+    github: {
+      repositories: [
+        { id: "r1", name: "alpha", stars: 15, forks: 2, sizeKb: 100, primaryLanguage: "TypeScript" },
+        { id: "r2", name: "beta", stars: 3, forks: 1, sizeKb: 40, primaryLanguage: "Python" },
+      ],
+    },
+  } as unknown as HubDatasets;
+
+  const metrics = computeAdminChartMetrics(sample);
+  assert.equal(metrics.timeline.length, 2);
+  assert.equal(metrics.timeline[1].month, "2026-11");
+  assert.equal(metrics.timeline[1].total, 4);
+
+  const pdfBucket = metrics.mediaMix.find((b) => b.type === "pdf");
+  assert.equal(pdfBucket?.count, 1);
+  assert.equal(pdfBucket?.sharePercent, 50);
+
+  assert.equal(metrics.topRepos[0].name, "alpha");
+  assert.equal(metrics.publishHealth.find((p) => p.label === "Articles")?.published, 1);
+  assert.equal(metrics.publishHealth.find((p) => p.label === "Articles")?.draft, 1);
+});
+
+test("GitHub storage path sanitizer and repo validator reject traversal and build valid raw URLs", () => {
+  assert.equal(validateGitHubRepoTarget({ owner: "AbdoKamelAyed", repo: "hub-assets", branch: "main" }).valid, true);
+  assert.equal(validateGitHubRepoTarget({ owner: "bad/owner", repo: "hub", branch: "main" }).valid, false);
+  assert.equal(validateGitHubRepoTarget({ owner: "Abdo", repo: "hub", branch: "feat/../bad" }).valid, false);
+
+  assert.equal(sanitizeRepoStoragePath("/media/guides/", "diagram v1.png"), "media/guides/diagram v1.png");
+  assert.equal(sanitizeRepoStoragePath("media/../secrets", "key.txt"), null);
+  assert.equal(sanitizeRepoStoragePath("media\\bad", "a.png"), null);
+
+  assert.equal(
+    buildGitHubRawUrl("AbdoKamelAyed", "hub", "main", "media/hello world.png"),
+    "https://raw.githubusercontent.com/AbdoKamelAyed/hub/main/media/hello%20world.png"
+  );
+});
+
+
+
+
 
 
 

@@ -8,6 +8,8 @@ import { AuthorAvatar } from "../components/AuthorProfileCard";
 export const AboutPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, lang }) => {
   const p = data.profileSettings;
   const gh = data.github.profile;
+  const visibleInternalProfiles = (p.internalProfiles || []).filter((item) => item.visibleOnAbout);
+  const displayLocation = loc(p.location, lang) || gh.location || L("Egypt", "مصر", lang);
 
   return (
     <div className="space-y-10">
@@ -47,6 +49,17 @@ export const AboutPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, l
               <p className="text-sm text-[var(--hub-text-muted)] leading-relaxed">{loc(p.careerDirection, lang)}</p>
             </div>
           )}
+
+          {(p.selectedAchievements || []).length > 0 && (
+            <div className="pt-4 border-t border-[var(--hub-border)] space-y-2">
+              <h3 className="text-sm font-semibold">{L("Selected Highlights", "أبرز الإنجازات", lang)}</h3>
+              <ul className="space-y-1.5 text-sm text-[var(--hub-text-muted)] list-disc ps-5">
+                {(p.selectedAchievements || []).map((ach, idx) => (
+                  <li key={idx}>{loc(ach, lang)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
         <aside className="lg:col-span-5 rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-5">
@@ -63,7 +76,7 @@ export const AboutPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, l
             <h3 className="font-semibold">{L("Public Identity & Links", "الهوية العامة والروابط", lang)}</h3>
             <div className="text-[var(--hub-text-muted)]">
               {gh.company ? `${gh.company} · ` : ""}
-              {gh.location || L("Egypt", "مصر", lang)}
+              {displayLocation}
             </div>
             <div className="flex flex-wrap gap-3 pt-2">
               {safeUrl(p.contact.github) && (
@@ -114,6 +127,103 @@ export const AboutPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, l
           </div>
         </aside>
       </div>
+
+      {visibleInternalProfiles.length > 0 && (
+        <section data-testid="about-internal-profiles" className="space-y-4">
+          <div className="space-y-1">
+            <h2 className="font-display text-2xl font-bold tracking-tight">
+              {L("Internal Profiles & Contributors", "الملفات الداخلية والمساهمون", lang)}
+            </h2>
+            <p className="text-sm text-[var(--hub-text-muted)]">
+              {L(
+                "Editorial identities, specialized tracks, and internal roles managed from the Studio.",
+                "الهويات التحريرية والمسارات التخصصية المدارة من لوحة التحكم.",
+                lang
+              )}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {visibleInternalProfiles.map((member) => {
+              const ghUrl = safeUrl(member.github);
+              const webUrl = safeUrl(member.website);
+              return (
+                <article
+                  key={member.id}
+                  data-testid={`internal-profile-card-${member.slug}`}
+                  className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 flex flex-col justify-between gap-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <AuthorAvatar src={member.avatarUrl} name={loc(member.name, lang)} sizeClass="w-12 h-12" />
+                      <div className="min-w-0">
+                        <h3 className="font-display text-base font-bold leading-snug truncate">
+                          {loc(member.name, lang)}
+                        </h3>
+                        <p className="text-xs font-medium text-[var(--hub-secondary)] truncate">
+                          {loc(member.roleTitle, lang)}
+                        </p>
+                        {(member.handle || loc(member.location, lang)) && (
+                          <div className="text-[11px] font-mono text-[var(--hub-text-muted)] truncate mt-0.5">
+                            {[member.handle, loc(member.location, lang)].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {loc(member.shortBio, lang) && (
+                      <p className="text-sm text-[var(--hub-text-muted)] leading-relaxed">
+                        {loc(member.shortBio, lang)}
+                      </p>
+                    )}
+
+                    {member.specialties.length > 0 && (
+                      <div className="text-xs font-mono text-[var(--hub-text-muted)]">
+                        {member.specialties.join(" · ")}
+                      </div>
+                    )}
+                  </div>
+
+                  {(ghUrl || webUrl || member.email) && (
+                    <div className="pt-3 border-t border-[var(--hub-border)] flex flex-wrap items-center gap-3 text-xs font-semibold">
+                      {ghUrl && (
+                        <a
+                          href={ghUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 hover:text-[var(--hub-secondary)]"
+                        >
+                          <span>GitHub</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {webUrl && (
+                        <a
+                          href={webUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 hover:text-[var(--hub-secondary)]"
+                        >
+                          <span>{L("Website", "الموقع", lang)}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {member.email && (
+                        <a
+                          href={`mailto:${member.email}`}
+                          className="inline-flex items-center gap-1 hover:text-[var(--hub-secondary)] font-mono"
+                        >
+                          <span>{member.email}</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 };

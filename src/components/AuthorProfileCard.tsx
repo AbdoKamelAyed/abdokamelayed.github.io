@@ -91,7 +91,7 @@ export const AuthorProfileCard: React.FC<{
 
           {(roleTitle || location) && (
             <div className="text-xs text-[var(--hub-text-muted)] flex flex-wrap items-center gap-2">
-              {roleTitle && <span className="font-medium text-blue-600 dark:text-blue-400">{roleTitle}</span>}
+              {roleTitle && <span className="font-medium text-[var(--hub-secondary)]">{roleTitle}</span>}
               {roleTitle && location && <span aria-hidden="true">·</span>}
               {location && <span>{location}</span>}
             </div>
@@ -117,7 +117,7 @@ export const AuthorProfileCard: React.FC<{
                 href={cleanGithub}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap"
+                className="inline-flex items-center gap-1 text-xs font-medium text-[var(--hub-secondary)] hover:underline whitespace-nowrap"
               >
                 <span>GitHub</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />

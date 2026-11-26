@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { ArrowLeft, FileDown, Maximize2, Printer, X } from "lucide-react";
 import type { HubDatasets, Lang } from "../types/hub";
 import {
-  calculateArticleScrollProgress,
   calculateReadingTimeMinutes,
   extractArticleSummary,
   getRelatedArticles,
@@ -13,6 +12,7 @@ import { extractTableOfContents } from "../utils/markdown";
 import { buildArticlePdfInput, generatePdfBytes, triggerPdfDownload } from "../utils/pdfMaker";
 import { AuthorAvatar, AuthorProfileCard } from "../components/AuthorProfileCard";
 import { ArticleCard } from "../components/Cards";
+import { ReadingProgressBar } from "../components/ReadingProgressBar";
 import { RichContentView } from "../components/RichContentView";
 import { TableOfContents } from "../components/TableOfContents";
 
@@ -25,46 +25,7 @@ export const ArticleDetailPage: React.FC<{
   const article = data.articles.find((a) => a.slug === target || a.id === target);
   const articleRef = useRef<HTMLElement | null>(null);
   const lastTriggerRef = useRef<HTMLElement | null>(null);
-  const [readingProgress, setReadingProgress] = useState(0);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
-
-  useEffect(() => {
-    if (!article) {
-      setReadingProgress(0);
-      return;
-    }
-
-    let frame = 0;
-    const updateProgress = () => {
-      frame = 0;
-      const el = articleRef.current;
-      const scrollY = window.scrollY || window.pageYOffset || 0;
-      const articleBottomInDoc = el
-        ? el.getBoundingClientRect().bottom + scrollY
-        : document.documentElement.scrollHeight;
-      const next = calculateArticleScrollProgress(
-        scrollY,
-        articleBottomInDoc,
-        window.innerHeight,
-        document.documentElement.scrollHeight
-      );
-      setReadingProgress(next);
-    };
-
-    const scheduleUpdate = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(updateProgress);
-    };
-
-    updateProgress();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate, { passive: true });
-    return () => {
-      if (frame) window.cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, [article?.id]);
 
   useEffect(() => {
     setLightboxImage(null);
@@ -130,20 +91,13 @@ export const ArticleDetailPage: React.FC<{
 
   return (
     <div className="space-y-12">
-      <div
-        role="progressbar"
-        aria-label={L("Article reading progress", "تقدم قراءة المقال", lang)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={readingProgress}
-        data-testid="reading-progress-bar"
-        className="fixed top-0 inset-x-0 h-[3px] z-50 bg-slate-200/50 dark:bg-slate-800/60 pointer-events-none"
-      >
-        <div
-          className="h-full transition-[width] duration-100 ease-out"
-          style={{ width: `${readingProgress}%`, backgroundColor: "var(--hub-secondary)" }}
+      {data.website.showReadingProgress !== false && (
+        <ReadingProgressBar
+          targetRef={articleRef}
+          contentKey={article.id}
+          label={L("Article reading progress", "تقدم قراءة المقال", lang)}
         />
-      </div>
+      )}
 
       <div className="print:hidden flex flex-wrap items-center justify-between gap-3">
         <a
@@ -166,11 +120,14 @@ export const ArticleDetailPage: React.FC<{
           </button>
           <button
             type="button"
+            data-testid="print-article-btn"
             onClick={() => window.print()}
-            className="px-3.5 py-1.5 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            aria-label={L("Print Article", "طباعة المقال", lang)}
+            title={L("Print article cleanly without navigation chrome", "طباعة المقال بدون قوائم التنقل", lang)}
+            className="print:hidden px-3.5 py-1.5 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-[var(--hub-secondary)] transition-colors cursor-pointer"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>{L("Print / PDF", "طباعة / PDF", lang)}</span>
+            <Printer className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{L("Print Article", "طباعة المقال", lang)}</span>
           </button>
         </div>
       </div>

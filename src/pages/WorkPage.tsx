@@ -36,7 +36,7 @@ export const WorkPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
                   </div>
                   <p className="text-sm text-[var(--hub-text)] leading-relaxed">{loc(item.summary, lang)}</p>
                   {item.skills.length > 0 && (
-                    <div className="text-xs font-mono text-blue-600 dark:text-blue-400">
+                    <div className="text-xs font-mono text-[var(--hub-secondary)]">
                       {item.skills.join(" · ")}
                     </div>
                   )}

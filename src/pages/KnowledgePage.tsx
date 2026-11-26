@@ -77,7 +77,7 @@ export const KnowledgePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ dat
               <article key={entry.id} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 flex flex-col justify-between gap-4">
                 <div className="space-y-2.5">
                   <div className="text-xs text-[var(--hub-text-muted)] flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">
+                    <span className="font-semibold text-[var(--hub-secondary)]">
                       {entry.entryType === "verified-reference"
                         ? L("Verified Reference", "مرجع موثق", lang)
                         : L("Personal Note", "ملاحظة شخصية", lang)}
@@ -100,7 +100,7 @@ export const KnowledgePage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ dat
                         href={refUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400 hover:underline ms-1"
+                        className="inline-flex items-center gap-0.5 text-[var(--hub-secondary)] hover:underline ms-1"
                       >
                         <span>{L("Source Link", "رابط المصدر", lang)}</span>
                         <ArrowUpRight className="w-3.5 h-3.5" />

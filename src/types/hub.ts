@@ -318,6 +318,23 @@ export interface KnowledgeEntry {
   source: string;
 }
 
+export interface InternalProfileRecord {
+  id: string;
+  slug: string;
+  name: LocalizedText;
+  handle?: string;
+  roleTitle: LocalizedText;
+  location?: LocalizedText;
+  avatarUrl?: string;
+  shortBio: LocalizedText;
+  specialties: string[];
+  email?: string;
+  github?: string;
+  website?: string;
+  visibleOnAbout: boolean;
+  isDefaultAuthor?: boolean;
+}
+
 export interface ProfileSettings {
   id: string;
   fullName: LocalizedText;
@@ -331,6 +348,7 @@ export interface ProfileSettings {
   careerDirection: LocalizedText;
   technicalInterests: string[];
   selectedAchievements: LocalizedText[];
+  internalProfiles?: InternalProfileRecord[];
   contact: {
     email: string;
     github: string;
@@ -355,8 +373,13 @@ export interface WebsiteSettings {
   seoKeywords?: string[];
   defaultLanguage: Lang;
   supportedLanguages: Lang[];
+  designThemeId?: string;
   defaultTheme: "light" | "dark";
   defaultGlassMode: boolean;
+  defaultFontScale?: "small" | "medium" | "large";
+  showBreadcrumbs?: boolean;
+  showReadingProgress?: boolean;
+  enableGlobalSearch?: boolean;
   primaryAccent: string;
   secondaryAccent: string;
   seoDescription: LocalizedText;
@@ -374,6 +397,10 @@ export interface GitHubSyncSettings {
   excludedRepos: string[];
   featuredRepos: string[];
   includeForksInLanguageStats: boolean;
+  storageOwner?: string;
+  storageRepo?: string;
+  storageBranch?: string;
+  storageFolder?: string;
   createdAt: string;
   updatedAt: string;
   status: string;

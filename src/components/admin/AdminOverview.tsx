@@ -5,6 +5,7 @@ import { clearLocalDrafts, getLocalDraftCount } from "../../services/dataService
 import type { AdminAuditEntry } from "../../utils/adminAuth";
 import { calculateReadingTimeMinutes, countWords, validateCollectionSchema } from "../../utils/analytics";
 import { formatDateTime, L, loc } from "../../utils/i18n";
+import { AdminCharts } from "./AdminCharts";
 
 export const AdminOverview: React.FC<{
   data: HubDatasets;
@@ -179,6 +180,9 @@ export const AdminOverview: React.FC<{
           </button>
         </div>
       </div>
+
+      {/* Data-Driven SVG Analytics Charts */}
+      <AdminCharts data={data} lang={lang} />
 
       {/* Main Analytics + Activity Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

@@ -29,7 +29,7 @@ export const ProjectCard: React.FC<{
       <div className="p-6 flex-1 flex flex-col justify-between gap-4">
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--hub-text-muted)]">
-            <span className="font-semibold text-blue-600 dark:text-blue-400">{project.status}</span>
+            <span className="font-semibold text-[var(--hub-secondary)]">{project.status}</span>
             <span aria-hidden="true">·</span>
             <span>{project.category}</span>
             {project.featured && (
@@ -67,7 +67,7 @@ export const ProjectCard: React.FC<{
           <div>
             <a
               href={href}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--hub-secondary)] hover:underline"
             >
               <span>{t("common.readMore", lang)}</span>
               <ArrowUpRight className="w-4 h-4" />
@@ -104,7 +104,7 @@ export const ArticleCard: React.FC<{
       <div className="p-6 flex-1 flex flex-col justify-between gap-4">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--hub-text-muted)]">
-            <span className="font-semibold text-blue-600 dark:text-blue-400">{article.type}</span>
+            <span className="font-semibold text-[var(--hub-secondary)]">{article.type}</span>
             <span aria-hidden="true">·</span>
             <span className="tabular-nums">{formatDate(article.publishedAt, lang)}</span>
             <span aria-hidden="true">·</span>
@@ -131,7 +131,7 @@ export const ArticleCard: React.FC<{
           </span>
           <a
             href={href}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline shrink-0"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--hub-secondary)] hover:underline shrink-0"
           >
             <span>{t("common.readMore", lang)}</span>
           </a>

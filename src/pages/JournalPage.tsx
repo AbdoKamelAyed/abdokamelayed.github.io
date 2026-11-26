@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, BookMarked, FileDown } from "lucide-react";
 import type { HubDatasets, JournalIssueCadence, Lang } from "../types/hub";
 import { calculateReadingTimeMinutes, groupArticlesByMonth, safeMediaUrl } from "../utils/analytics";
@@ -6,6 +6,7 @@ import { formatDate, L, loc, t } from "../utils/i18n";
 import { calculateIssueStats, formatCadenceLabel, resolveIssueArticles } from "../utils/issues";
 import { buildIssuePdfInput, generatePdfBytes, triggerPdfDownload } from "../utils/pdfMaker";
 import { ArticleCard } from "../components/Cards";
+import { ReadingProgressBar } from "../components/ReadingProgressBar";
 
 export const JournalPage: React.FC<{
   data: HubDatasets;
@@ -17,6 +18,7 @@ export const JournalPage: React.FC<{
   const [tag, setTag] = useState("all");
   const [viewMode, setViewMode] = useState<"editorial" | "issues" | "archive">(initialView);
   const [cadenceFilter, setCadenceFilter] = useState<"all" | JournalIssueCadence>("all");
+  const journalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setViewMode(initialView);
@@ -56,7 +58,15 @@ export const JournalPage: React.FC<{
   const archived = useMemo(() => groupArticlesByMonth(filtered), [filtered]);
 
   return (
-    <div className="space-y-8">
+    <div ref={journalRef} className="space-y-8">
+      {data.website.showReadingProgress !== false && (
+        <ReadingProgressBar
+          targetRef={journalRef}
+          contentKey={`${viewMode}-${filtered.length}-${filteredIssues.length}`}
+          showOnlyWhenScrollable
+          label={L("Journal reading progress", "تقدم قراءة المدونة", lang)}
+        />
+      )}
       <header className="border-b border-[var(--hub-border)] pb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-2">
           <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
@@ -189,7 +199,7 @@ export const JournalPage: React.FC<{
                   <div className="p-6 flex-1 flex flex-col justify-between gap-4">
                     <div className="space-y-2.5">
                       <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-[var(--hub-text-muted)]">
-                        <span className="font-semibold text-blue-600 dark:text-blue-400">{issue.issueNumber}</span>
+                        <span className="font-semibold text-[var(--hub-secondary)]">{issue.issueNumber}</span>
                         <span aria-hidden="true">·</span>
                         <span>{formatCadenceLabel(issue.cadence, lang)}</span>
                         <span aria-hidden="true">·</span>
@@ -225,7 +235,7 @@ export const JournalPage: React.FC<{
                       <div className="flex items-center justify-between gap-2">
                         <a
                           href={href}
-                          className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                          className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--hub-secondary)] hover:underline"
                         >
                           <span>{L("Read Issue", "تصفح العدد", lang)}</span>
                           <ArrowUpRight className="w-4 h-4" />

@@ -26,6 +26,7 @@ import type { Lang, MediaAssetRecord } from "../../types/hub";
 import { resolveMediaObjectUrl } from "../../services/mediaLibraryService";
 import { formatBytesCompact, safeMediaUrl } from "../../utils/analytics";
 import { L, loc } from "../../utils/i18n";
+import { HighlightedCodeLines } from "../HighlightedCodeBlock";
 
 function formatMediaTime(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return "00:00";
@@ -330,23 +331,12 @@ export const CustomMediaViewer: React.FC<{
         </div>
       ) : asset.mediaType === "code" ? (
         <div dir="ltr" className="bg-slate-950 text-slate-100 overflow-x-auto text-xs sm:text-sm font-mono">
-          {(() => {
-            const codeLines = (asset.codeContent || "").split("\n");
-            return (
-              <div className="p-4 space-y-0.5 min-w-full">
-                {codeLines.map((lineText, idx) => (
-                  <div key={idx} className="grid grid-cols-[2.5rem_1fr] gap-3 leading-relaxed">
-                    <span className="text-slate-500 select-none text-end tabular-nums">
-                      {idx + 1}
-                    </span>
-                    <span className={wrapLines ? "whitespace-pre-wrap break-all" : "whitespace-pre"}>
-                      {lineText || " "}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
+          <HighlightedCodeLines
+            code={asset.codeContent || ""}
+            language={asset.codeLanguage}
+            wrapLines={wrapLines}
+            showLineNumbers
+          />
         </div>
       ) : asset.mediaType === "image" ? (
         <div className="p-4 bg-slate-50 dark:bg-slate-900/60 overflow-auto flex items-center justify-center min-h-[220px] max-h-[540px]">

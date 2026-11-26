@@ -3,6 +3,7 @@ import type { Lang, MediaAssetRecord } from "../types/hub";
 import { safeUrl } from "../utils/analytics";
 import { L } from "../utils/i18n";
 import { parseMarkdownBlocks, tokenizeInlineMarkdown } from "../utils/markdown";
+import { HighlightedCodeBlock } from "./HighlightedCodeBlock";
 import { CustomMediaViewer } from "./media/CustomMediaViewer";
 
 const InlineRuns: React.FC<{ text: string }> = ({ text }) => {
@@ -31,7 +32,7 @@ const InlineRuns: React.FC<{ text: string }> = ({ text }) => {
               href={clean}
               target={clean.startsWith("http") ? "_blank" : undefined}
               rel={clean.startsWith("http") ? "noopener noreferrer" : undefined}
-              className="text-blue-600 dark:text-blue-400 underline underline-offset-2"
+              className="text-[var(--hub-secondary)] underline underline-offset-2"
             >
               {tok.text}
             </a>
@@ -73,7 +74,7 @@ export const RichContentView: React.FC<{
           return (
             <blockquote
               key={idx}
-              className="pl-4 border-s-2 border-blue-600/60 dark:border-blue-400/60 italic text-[var(--hub-text-muted)]"
+              className="pl-4 border-s-2 border-[var(--hub-secondary)] italic text-[var(--hub-text-muted)]"
             >
               <InlineRuns text={block.text} />
             </blockquote>
@@ -92,13 +93,12 @@ export const RichContentView: React.FC<{
         }
         if (block.type === "code") {
           return (
-            <pre
+            <HighlightedCodeBlock
               key={idx}
-              dir="ltr"
-              className="rounded-xl border border-[var(--hub-border)] bg-slate-950 text-slate-100 p-4 overflow-x-auto text-sm font-mono"
-            >
-              <code>{block.code}</code>
-            </pre>
+              code={block.code}
+              language={block.lang}
+              lang={lang}
+            />
           );
         }
         if (block.type === "embed") {

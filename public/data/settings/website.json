@@ -6,6 +6,7 @@
   "defaultAuthor": "Abdo Kamel",
   "defaultLanguage": "en",
   "supportedLanguages": ["en", "ar"],
+  "designThemeId": "swiss-studio",
   "defaultTheme": "light",
   "defaultGlassMode": false,
   "primaryAccent": "#0f172a",

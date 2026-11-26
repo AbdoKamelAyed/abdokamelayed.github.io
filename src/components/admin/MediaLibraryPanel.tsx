@@ -5,6 +5,7 @@ import {
   Copy,
   Download,
   FileText,
+  FolderGit2,
   Image as ImageIcon,
   Music,
   Plus,
@@ -14,6 +15,10 @@ import {
 } from "lucide-react";
 import type { HubDatasets, Lang, MediaAssetRecord, MediaAssetType } from "../../types/hub";
 import { saveLocalDraft } from "../../services/dataService";
+import {
+  arrayBufferToBase64,
+  uploadFileToGitHubRepo,
+} from "../../services/githubStorageService";
 import {
   deleteMediaBlob,
   detectMediaTypeFromFile,
@@ -26,18 +31,29 @@ import { CustomMediaViewer } from "../media/CustomMediaViewer";
 export const MediaLibraryPanel: React.FC<{
   data: HubDatasets;
   lang: Lang;
+  githubToken?: string;
+  onChangeGithubToken?: (token: string) => void;
   onUpdateData: (updater: (prev: HubDatasets) => HubDatasets) => void;
   onNotify: (msg: string) => void;
   onAudit: (action: string, target: string) => void;
   onDownloadJson: (filename: string, payload: unknown) => void;
-}> = ({ data, lang, onUpdateData, onNotify, onAudit, onDownloadJson }) => {
+}> = ({
+  data,
+  lang,
+  githubToken = "",
+  onChangeGithubToken,
+  onUpdateData,
+  onNotify,
+  onAudit,
+  onDownloadJson,
+}) => {
   const [filterType, setFilterType] = useState<"all" | MediaAssetType>("all");
   const [selectedId, setSelectedId] = useState<string>(data.mediaAssets[0]?.id || "");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  // Manual URL / Code asset creation
-  const [createMode, setCreateMode] = useState<"upload" | "url" | "code">("upload");
+  // Manual URL / Code / GitHub Repo asset creation
+  const [createMode, setCreateMode] = useState<"upload" | "github" | "url" | "code">("upload");
   const [titleEn, setTitleEn] = useState("");
   const [captionEn, setCaptionEn] = useState("");
   const [mediaType, setMediaType] = useState<MediaAssetType>("pdf");
@@ -46,6 +62,27 @@ export const MediaLibraryPanel: React.FC<{
   const [codeBody, setCodeBody] = useState("");
   const [fileName, setFileName] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // GitHub Repo Storage upload state (session PAT kept strictly in memory)
+  const [ghOwner, setGhOwner] = useState(
+    data.githubSyncSettings.storageOwner || data.profileSettings.githubUsername || "AbdoKamelAyed"
+  );
+  const [ghRepo, setGhRepo] = useState(
+    data.githubSyncSettings.storageRepo || `${data.profileSettings.githubUsername || "AbdoKamelAyed"}.github.io`
+  );
+  const [ghBranch, setGhBranch] = useState(data.githubSyncSettings.storageBranch || "main");
+  const [ghFolder, setGhFolder] = useState(data.githubSyncSettings.storageFolder || "media");
+  const [ghLocalToken, setGhLocalToken] = useState(githubToken);
+  const [ghAllowOverwrite, setGhAllowOverwrite] = useState(false);
+  const [ghUploading, setGhUploading] = useState(false);
+  const [ghStatus, setGhStatus] = useState("");
+  const ghFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const effectiveToken = githubToken || ghLocalToken;
+  const updateToken = (next: string) => {
+    setGhLocalToken(next);
+    onChangeGithubToken?.(next);
+  };
 
   const persistAssets = (nextAssets: MediaAssetRecord[], action: string, target: string) => {
     const ts = new Date().toISOString();
@@ -170,6 +207,88 @@ export const MediaLibraryPanel: React.FC<{
     onNotify(L("Media asset added to library and ready to embed.", "تمت إضافة العنصر للمكتبة وهو جاهز للتضمين.", lang));
   };
 
+  const handleGitHubRepoFilesUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    if (!effectiveToken.trim()) {
+      setGhStatus(
+        L(
+          "Enter a session GitHub Personal Access Token (contents:write) first. It stays strictly in memory.",
+          "أدخل رمز GitHub المؤقت (contents:write) أولاً. يبقى الرمز في الذاكرة المؤقتة فقط.",
+          lang
+        )
+      );
+      return;
+    }
+
+    setGhUploading(true);
+    setGhStatus(L("Uploading to GitHub repository...", "جارٍ الرفع إلى مستودع GitHub...", lang));
+    const uploadedAssets: MediaAssetRecord[] = [];
+    const ts = new Date().toISOString();
+
+    try {
+      for (const file of Array.from(files)) {
+        const buffer = await file.arrayBuffer();
+        const contentBase64 = arrayBufferToBase64(buffer);
+        const res = await uploadFileToGitHubRepo({
+          token: effectiveToken.trim(),
+          owner: ghOwner,
+          repo: ghRepo,
+          branch: ghBranch,
+          folder: ghFolder,
+          fileName: file.name,
+          contentBase64,
+          allowOverwrite: ghAllowOverwrite,
+        });
+
+        const detected = detectMediaTypeFromFile(file);
+        const baseSlug = slugify(file.name.replace(/\.[^.]+$/, "")) || "asset";
+        const id = `gh-${detected.mediaType}-${baseSlug}-${Date.now().toString(36).slice(-4)}`;
+        const codeText =
+          detected.mediaType === "code" && file.size <= 512_000 ? await file.text() : undefined;
+
+        uploadedAssets.push({
+          id,
+          title: { en: titleEn.trim() || file.name, ar: titleEn.trim() || file.name },
+          mediaType: detected.mediaType,
+          mimeType: file.type || "application/octet-stream",
+          url: res.rawUrl,
+          storageMode: "url",
+          codeContent: codeText,
+          codeLanguage: detected.codeLanguage,
+          fileName: file.name,
+          sizeBytes: file.size,
+          caption: { en: captionEn.trim() || `Stored in ${ghOwner}/${ghRepo}/${res.path}`, ar: file.name },
+          tags: [detected.mediaType, "github-storage"],
+          createdAt: ts,
+          updatedAt: ts,
+          status: "published",
+          source: "github-storage",
+        });
+      }
+
+      if (uploadedAssets.length > 0) {
+        const next = [...uploadedAssets, ...data.mediaAssets];
+        persistAssets(next, "Uploaded to GitHub Repo Storage", uploadedAssets.map((a) => a.fileName || a.id).join(", "));
+        setSelectedId(uploadedAssets[0].id);
+        setTitleEn("");
+        setCaptionEn("");
+        const msg = L(
+          `Uploaded ${uploadedAssets.length} file(s) to ${ghOwner}/${ghRepo}/${ghFolder} and registered in Media Library.`,
+          `تم رفع ${uploadedAssets.length} ملف(ات) إلى مستودع GitHub وتسجيلها في مكتبة الوسائط.`,
+          lang
+        );
+        setGhStatus(msg);
+        onNotify(msg);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "GitHub upload failed.";
+      setGhStatus(msg);
+      onNotify(msg);
+    } finally {
+      setGhUploading(false);
+    }
+  };
+
   const copyEmbedCode = async (id: string) => {
     const snippet = `[[embed:${id}]]`;
     try {
@@ -207,17 +326,19 @@ export const MediaLibraryPanel: React.FC<{
               <h2 className="font-display text-lg font-semibold">
                 {L("Media Library Upload", "رفع وإدارة المكتبة", lang)}
               </h2>
-              <div className="inline-flex rounded-lg border border-[var(--hub-border)] p-0.5 text-xs">
+              <div className="inline-flex flex-wrap rounded-lg border border-[var(--hub-border)] p-0.5 text-xs">
                 {(
                   [
-                    ["upload", L("File Upload", "رفع ملف", lang)],
+                    ["upload", L("Local Upload", "رفع محلي", lang)],
+                    ["github", L("GitHub Repo", "مستودع GitHub", lang)],
                     ["url", L("Remote URL", "رابط", lang)],
                     ["code", L("Code Snippet", "كود", lang)],
-                  ] as ["upload" | "url" | "code", string][]
+                  ] as ["upload" | "github" | "url" | "code", string][]
                 ).map(([m, label]) => (
                   <button
                     key={m}
                     type="button"
+                    data-testid={`media-mode-${m}`}
                     onClick={() => setCreateMode(m)}
                     className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer whitespace-nowrap ${
                       createMode === m ? "bg-[var(--hub-primary)] text-[var(--hub-bg)]" : "text-[var(--hub-text-muted)]"
@@ -229,7 +350,107 @@ export const MediaLibraryPanel: React.FC<{
               </div>
             </div>
 
-            {createMode === "upload" ? (
+            {createMode === "github" ? (
+              <div data-testid="media-github-storage-panel" className="space-y-3">
+                <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-3 text-xs text-[var(--hub-text-muted)] flex items-start gap-2">
+                  <FolderGit2 className="w-4 h-4 text-[var(--hub-secondary)] shrink-0 mt-0.5" />
+                  <span>
+                    {L(
+                      "Push files directly to your GitHub repository via Contents API and auto-register their raw CDN URLs here. Your token stays in memory only.",
+                      "ارفع الملفات مباشرة إلى مستودع GitHub لتسجيل روابطها فوراً في المكتبة. الرمز يبقى في الذاكرة المؤقتة فقط.",
+                      lang
+                    )}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={ghOwner}
+                    onChange={(e) => setGhOwner(e.target.value)}
+                    placeholder={L("Owner", "المالك", lang)}
+                    aria-label={L("GitHub repository owner", "مالك مستودع GitHub", lang)}
+                    className="px-2.5 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                  />
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={ghRepo}
+                    onChange={(e) => setGhRepo(e.target.value)}
+                    placeholder={L("Repository", "المستودع", lang)}
+                    aria-label={L("GitHub repository name", "اسم مستودع GitHub", lang)}
+                    className="px-2.5 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                  />
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={ghBranch}
+                    onChange={(e) => setGhBranch(e.target.value)}
+                    placeholder="main"
+                    aria-label={L("GitHub branch", "الفرع", lang)}
+                    className="px-2.5 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                  />
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={ghFolder}
+                    onChange={(e) => setGhFolder(e.target.value)}
+                    placeholder="media"
+                    aria-label={L("Target storage folder", "مجلد التخزين", lang)}
+                    className="px-2.5 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                  />
+                </div>
+
+                <input
+                  type="password"
+                  dir="ltr"
+                  value={effectiveToken}
+                  onChange={(e) => updateToken(e.target.value)}
+                  placeholder={L("Session GitHub PAT (not saved to storage)", "رمز GitHub المؤقت للجلسة", lang)}
+                  aria-label={L("Session GitHub Token", "رمز GitHub للجلسة", lang)}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                />
+
+                <label className="inline-flex items-center gap-2 text-xs cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ghAllowOverwrite}
+                    onChange={(e) => setGhAllowOverwrite(e.target.checked)}
+                  />
+                  <span>{L("Overwrite existing file if name already exists", "السماح باستبدال الملف إن وجد مسبقاً", lang)}</span>
+                </label>
+
+                <input
+                  ref={ghFileInputRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => {
+                    handleGitHubRepoFilesUpload(e.target.files);
+                    e.target.value = "";
+                  }}
+                  aria-label={L("Upload files to GitHub repository", "رفع ملفات إلى GitHub", lang)}
+                  className="sr-only"
+                />
+                <button
+                  type="button"
+                  disabled={ghUploading}
+                  onClick={() => ghFileInputRef.current?.click()}
+                  className="w-full px-4 py-2.5 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>
+                    {ghUploading
+                      ? L("Uploading to GitHub...", "جارٍ الرفع إلى GitHub...", lang)
+                      : L("Choose Files & Push to GitHub Repo", "اختر ملفات وارفعها لمستودع GitHub", lang)}
+                  </span>
+                </button>
+
+                {ghStatus && (
+                  <p className="text-xs text-[var(--hub-secondary)] leading-relaxed">{ghStatus}</p>
+                )}
+              </div>
+            ) : createMode === "upload" ? (
               <div className="space-y-3">
                 <div
                   onDragOver={(e) => {

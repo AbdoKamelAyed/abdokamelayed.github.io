@@ -61,7 +61,7 @@ export const TableOfContents: React.FC<{
       className="print:hidden lg:sticky lg:top-24 rounded-2xl border border-[var(--hub-border)] hub-subtle p-4 space-y-3"
     >
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--hub-text-muted)]">
-        <List className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+        <List className="w-3.5 h-3.5 text-[var(--hub-secondary)]" />
         <span>{L("Table of Contents", "جدول المحتويات", lang)}</span>
       </div>
 

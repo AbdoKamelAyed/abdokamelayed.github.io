@@ -27,6 +27,7 @@ import { AuthorAvatar } from "../components/AuthorProfileCard";
 import { AdminLoginGate } from "../components/admin/AdminLoginGate";
 import { AdminOverview } from "../components/admin/AdminOverview";
 import { ArticleRichEditor } from "../components/admin/ArticleRichEditor";
+import { GitHubRepoStoragePanel } from "../components/admin/GitHubRepoStoragePanel";
 import { IssueBuilderPanel } from "../components/admin/IssueBuilderPanel";
 import { MediaLibraryPanel } from "../components/admin/MediaLibraryPanel";
 import { SiteSettingsPanel } from "../components/admin/SiteSettingsPanel";
@@ -95,9 +96,10 @@ export const AdminPage: React.FC<{
   const [expPeriod, setExpPeriod] = useState("");
   const [expSummaryEn, setExpSummaryEn] = useState("");
 
-  // GitHub Sync settings state
+  // GitHub Sync settings & session-only PAT (strictly in React memory)
   const [excludedInput, setExcludedInput] = useState(data.githubSyncSettings.excludedRepos.join(", "));
   const [featuredInput, setFeaturedInput] = useState(data.githubSyncSettings.featuredRepos.join(", "));
+  const [githubToken, setGithubToken] = useState("");
 
   const recordAudit = (action: string, target: string) => {
     const refreshed = touchAdminSession();
@@ -329,6 +331,7 @@ export const AdminPage: React.FC<{
           <button
             type="button"
             onClick={() => {
+              setGithubToken("");
               clearAdminSession();
               setSession(null);
             }}
@@ -427,6 +430,8 @@ export const AdminPage: React.FC<{
         <MediaLibraryPanel
           data={data}
           lang={lang}
+          githubToken={githubToken}
+          onChangeGithubToken={setGithubToken}
           onUpdateData={onUpdateData}
           onNotify={setStatusBanner}
           onAudit={recordAudit}
@@ -747,89 +752,101 @@ export const AdminPage: React.FC<{
       )}
 
       {tab === "github" && (
-        <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-5 max-w-3xl">
-          <h2 className="font-display text-xl font-semibold">{L("GitHub Synchronization & Exclusions", "إدارة مزامنة GitHub", lang)}</h2>
-          <div className="text-sm text-[var(--hub-text-muted)] space-y-1 font-mono">
-            <div>Status: {data.github.syncMeta.syncStatus}</div>
-            <div>Last Successful Sync: {formatDateTime(data.github.syncMeta.lastSuccessfulSync, lang)}</div>
-            <div>Errors: {data.github.syncMeta.errorCount}</div>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={async () => {
-                setLiveGhResult(L("Checking public GitHub REST API...", "جارٍ فحص واجهة GitHub العامة...", lang));
-                const res = await refreshPublicGithubLive(data.githubSyncSettings.username || "AbdoKamelAyed");
-                setLiveGhResult(res.message);
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer"
-            >
-              {L("Check Live Public GitHub API", "فحص واجهة GitHub الحية", lang)}
-            </button>
-            <a
-              href="https://github.com/AbdoKamelAyed/abdokamelayed.github.io/actions"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 rounded-lg text-sm font-semibold border border-[var(--hub-border)]"
-            >
-              {L("Open GitHub Actions", "فتح GitHub Actions", lang)}
-            </a>
-          </div>
-
-          {liveGhResult && <p className="text-sm text-blue-600 dark:text-blue-400">{liveGhResult}</p>}
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const nextSync = {
-                ...data.githubSyncSettings,
-                excludedRepos: excludedInput.split(",").map((s) => s.trim()).filter(Boolean),
-                featuredRepos: featuredInput.split(",").map((s) => s.trim()).filter(Boolean),
-                updatedAt: nowIso(),
-              };
-              saveLocalDraft("./data/settings/github-sync.json", nextSync);
-              onUpdateData((prev) => ({ ...prev, githubSyncSettings: nextSync }));
-              recordAudit("Updated GitHub Sync Config", nextSync.username);
-              setStatusBanner(L("Saved GitHub sync preferences.", "تم حفظ إعدادات مزامنة GitHub.", lang));
-            }}
-            className="space-y-3 pt-4 border-t border-[var(--hub-border)]"
-          >
-            <div>
-              <label className="text-xs font-semibold text-[var(--hub-text-muted)]">
-                {L("Excluded Repositories (comma separated)", "المستودعات المستبعدة", lang)}
-              </label>
-              <input
-                type="text"
-                value={excludedInput}
-                onChange={(e) => setExcludedInput(e.target.value)}
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-5 max-w-3xl">
+            <h2 className="font-display text-xl font-semibold">{L("GitHub Synchronization & Exclusions", "إدارة مزامنة GitHub", lang)}</h2>
+            <div className="text-sm text-[var(--hub-text-muted)] space-y-1 font-mono">
+              <div>Status: {data.github.syncMeta.syncStatus}</div>
+              <div>Last Successful Sync: {formatDateTime(data.github.syncMeta.lastSuccessfulSync, lang)}</div>
+              <div>Errors: {data.github.syncMeta.errorCount}</div>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-[var(--hub-text-muted)]">
-                {L("Featured Repositories (comma separated)", "المستودعات المميزة", lang)}
-              </label>
-              <input
-                type="text"
-                value={featuredInput}
-                onChange={(e) => setFeaturedInput(e.target.value)}
-                className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
-                {L("Save Sync Config", "حفظ الإعدادات", lang)}
-              </button>
+
+            <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => downloadJson("github-sync.json", data.githubSyncSettings)}
-                className="px-4 py-2 rounded-lg text-sm border border-[var(--hub-border)] cursor-pointer"
+                onClick={async () => {
+                  setLiveGhResult(L("Checking public GitHub REST API...", "جارٍ فحص واجهة GitHub العامة...", lang));
+                  const res = await refreshPublicGithubLive(data.githubSyncSettings.username || "AbdoKamelAyed");
+                  setLiveGhResult(res.message);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer"
               >
-                {L("Export github-sync.json", "تصدير github-sync.json", lang)}
+                {L("Check Live Public GitHub API", "فحص واجهة GitHub الحية", lang)}
               </button>
+              <a
+                href="https://github.com/AbdoKamelAyed/abdokamelayed.github.io/actions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-lg text-sm font-semibold border border-[var(--hub-border)]"
+              >
+                {L("Open GitHub Actions", "فتح GitHub Actions", lang)}
+              </a>
             </div>
-          </form>
+
+            {liveGhResult && <p className="text-sm text-blue-600 dark:text-blue-400">{liveGhResult}</p>}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const nextSync = {
+                  ...data.githubSyncSettings,
+                  excludedRepos: excludedInput.split(",").map((s) => s.trim()).filter(Boolean),
+                  featuredRepos: featuredInput.split(",").map((s) => s.trim()).filter(Boolean),
+                  updatedAt: nowIso(),
+                };
+                saveLocalDraft("./data/settings/github-sync.json", nextSync);
+                onUpdateData((prev) => ({ ...prev, githubSyncSettings: nextSync }));
+                recordAudit("Updated GitHub Sync Config", nextSync.username);
+                setStatusBanner(L("Saved GitHub sync preferences.", "تم حفظ إعدادات مزامنة GitHub.", lang));
+              }}
+              className="space-y-3 pt-4 border-t border-[var(--hub-border)]"
+            >
+              <div>
+                <label className="text-xs font-semibold text-[var(--hub-text-muted)]">
+                  {L("Excluded Repositories (comma separated)", "المستودعات المستبعدة", lang)}
+                </label>
+                <input
+                  type="text"
+                  value={excludedInput}
+                  onChange={(e) => setExcludedInput(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-[var(--hub-text-muted)]">
+                  {L("Featured Repositories (comma separated)", "المستودعات المميزة", lang)}
+                </label>
+                <input
+                  type="text"
+                  value={featuredInput}
+                  onChange={(e) => setFeaturedInput(e.target.value)}
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer">
+                  {L("Save Sync Config", "حفظ الإعدادات", lang)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadJson("github-sync.json", data.githubSyncSettings)}
+                  className="px-4 py-2 rounded-lg text-sm border border-[var(--hub-border)] cursor-pointer"
+                >
+                  {L("Export github-sync.json", "تصدير github-sync.json", lang)}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <GitHubRepoStoragePanel
+            data={data}
+            lang={lang}
+            githubToken={githubToken}
+            onChangeGithubToken={setGithubToken}
+            onUpdateData={onUpdateData}
+            onNotify={setStatusBanner}
+            onAudit={recordAudit}
+          />
         </div>
       )}
 

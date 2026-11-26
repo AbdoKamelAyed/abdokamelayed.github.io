@@ -47,7 +47,7 @@ export const ProjectDetailPage: React.FC<{
 
       <header className="border-b border-[var(--hub-border)] pb-8 space-y-4">
         <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--hub-text-muted)]">
-          <span className="font-semibold text-blue-600 dark:text-blue-400">{project.status}</span>
+          <span className="font-semibold text-[var(--hub-secondary)]">{project.status}</span>
           <span aria-hidden="true">·</span>
           <span>{project.category}</span>
           <span aria-hidden="true">·</span>

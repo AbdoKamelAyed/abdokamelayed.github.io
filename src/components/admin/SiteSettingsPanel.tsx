@@ -10,6 +10,7 @@ import {
   Palette,
   Plus,
   SearchCheck,
+  SlidersHorizontal,
   Trash2,
   Upload,
   User,
@@ -27,9 +28,18 @@ import {
   type AdminAccountRecord,
 } from "../../utils/adminAuth";
 import { safeMediaUrl } from "../../utils/analytics";
+import {
+  DEFAULT_DESIGN_THEME_ID,
+  DESIGN_THEMES,
+  getDesignThemeById,
+} from "../../utils/designThemes";
+import { FONT_SCALES, normalizeFontScale, type FontScale } from "../../utils/typography";
 import { L, loc } from "../../utils/i18n";
 import { analyzeSeoAudit, generateRobotsTxt, generateSitemapXml } from "../../utils/seoEngine";
 import { AuthorAvatar, DEFAULT_AUTHOR_AVATAR } from "../AuthorProfileCard";
+import { InternalProfilesEditor } from "./InternalProfilesEditor";
+
+type SettingsSubTab = "theme" | "profiles" | "controls" | "seo" | "security";
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -59,6 +69,8 @@ export const SiteSettingsPanel: React.FC<{
   onAudit,
   onDownloadJson,
 }) => {
+  const [settingsSubTab, setSettingsSubTab] = useState<SettingsSubTab>("theme");
+
   // Website settings
   const [siteName, setSiteName] = useState(data.website.siteName);
   const [shortTitle, setShortTitle] = useState(data.website.shortTitle);
@@ -68,8 +80,23 @@ export const SiteSettingsPanel: React.FC<{
     data.website.defaultAuthor || loc(data.profileSettings.fullName, "en") || "Abdo Kamel"
   );
   const [defaultLanguage, setDefaultLanguage] = useState<Lang>(data.website.defaultLanguage);
+  const [designThemeId, setDesignThemeId] = useState<string>(
+    data.website.designThemeId || DEFAULT_DESIGN_THEME_ID
+  );
   const [defaultTheme, setDefaultTheme] = useState<"light" | "dark">(data.website.defaultTheme);
   const [defaultGlassMode, setDefaultGlassMode] = useState(Boolean(data.website.defaultGlassMode));
+  const [defaultFontScale, setDefaultFontScale] = useState<FontScale>(
+    normalizeFontScale(data.website.defaultFontScale)
+  );
+  const [showBreadcrumbs, setShowBreadcrumbs] = useState<boolean>(
+    data.website.showBreadcrumbs !== false
+  );
+  const [showReadingProgress, setShowReadingProgress] = useState<boolean>(
+    data.website.showReadingProgress !== false
+  );
+  const [enableGlobalSearch, setEnableGlobalSearch] = useState<boolean>(
+    data.website.enableGlobalSearch !== false
+  );
   const [primaryAccent, setPrimaryAccent] = useState(data.website.primaryAccent || "#0f172a");
   const [secondaryAccent, setSecondaryAccent] = useState(data.website.secondaryAccent || "#2563eb");
   const [seoEn, setSeoEn] = useState(
@@ -199,8 +226,8 @@ export const SiteSettingsPanel: React.FC<{
     e.target.value = "";
   };
 
-  const handleSaveSiteSettings = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSiteSettings = (e?: React.FormEvent) => {
+    e?.preventDefault();
     const ts = new Date().toISOString();
 
     const nextWebsite = {
@@ -214,8 +241,13 @@ export const SiteSettingsPanel: React.FC<{
       twitterHandle: twitterHandle.trim() || undefined,
       seoKeywords: seoKeywordsInput.split(",").map((s) => s.trim()).filter(Boolean),
       defaultLanguage,
+      designThemeId,
       defaultTheme,
       defaultGlassMode,
+      defaultFontScale,
+      showBreadcrumbs,
+      showReadingProgress,
+      enableGlobalSearch,
       primaryAccent,
       secondaryAccent,
       seoDescription: {
@@ -287,16 +319,169 @@ export const SiteSettingsPanel: React.FC<{
 
   const safePreviewOg = safeMediaUrl(ogImage) || DEFAULT_AUTHOR_AVATAR;
 
+  const selectedDirection = useMemo(() => getDesignThemeById(designThemeId), [designThemeId]);
+
+  const handleSelectAdminDirection = (nextId: string) => {
+    const picked = getDesignThemeById(nextId);
+    setDesignThemeId(picked.id);
+    setDefaultTheme(picked.polarity);
+    setDefaultGlassMode(picked.glassRecommended);
+    setPrimaryAccent(picked.tokens.primary);
+    setSecondaryAccent(picked.tokens.secondary);
+    onApplyWebsiteTheme({
+      ...data.website,
+      designThemeId: picked.id,
+      defaultTheme: picked.polarity,
+      defaultGlassMode: picked.glassRecommended,
+      primaryAccent: picked.tokens.primary,
+      secondaryAccent: picked.tokens.secondary,
+    });
+    onAudit("Previewed Design Direction", picked.id);
+  };
+
   return (
-    <div className="space-y-8">
-      <form onSubmit={handleSaveSiteSettings} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Site Identity & Appearance */}
-          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
-            <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
-              <Palette className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>{L("Site Identity & Appearance", "هوية الموقع والمظهر", lang)}</span>
-            </h2>
+    <div className="space-y-6">
+      {/* Focused Sub-tab Navigation for Admin Site Settings */}
+      <div
+        role="tablist"
+        aria-label={L("Site settings categories", "أقسام إعدادات الموقع", lang)}
+        className="flex flex-wrap items-center gap-2 border-b border-[var(--hub-border)] pb-3"
+      >
+        {(
+          [
+            ["theme", Palette, L("Theme & Design Studio (15)", "استوديو التصميم (١٥)", lang)],
+            ["profiles", Users, L("Internal Profiles & Bio", "الملفات الداخلية والسيرة", lang)],
+            ["controls", SlidersHorizontal, L("Specific Site Controls", "إعدادات الموقع الدقيقة", lang)],
+            ["seo", SearchCheck, L("SEO & Indexing", "محرك SEO والفهرسة", lang)],
+            ["security", KeyRound, L("Security & Operators", "الأمان وحسابات الإدارة", lang)],
+          ] as [SettingsSubTab, React.ComponentType<{ className?: string }>, string][]
+        ).map(([subId, SubIcon, subLabel]) => (
+          <button
+            key={subId}
+            type="button"
+            role="tab"
+            aria-selected={settingsSubTab === subId}
+            data-testid={`settings-subtab-${subId}`}
+            onClick={() => setSettingsSubTab(subId)}
+            className={`px-3.5 py-2 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+              settingsSubTab === subId
+                ? "bg-[var(--hub-primary)] text-[var(--hub-bg)]"
+                : "border border-[var(--hub-border)] text-[var(--hub-text-muted)] hover:text-[var(--hub-text)]"
+            }`}
+          >
+            <SubIcon className="w-3.5 h-3.5" />
+            <span>{subLabel}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-6">
+        {/* SUB-TAB 1: 15 Design Directions + Brand Identity & Accents */}
+        {settingsSubTab === "theme" && (
+          <div className="space-y-6">
+            <section
+              data-testid="admin-design-directions"
+              className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-[var(--hub-secondary)]" />
+                    <span>{L("Global Site Design Directions (15 Complete Systems)", "الاتجاهات التصميمية الشاملة للموقع (١٥ نظاماً)", lang)}</span>
+                  </h2>
+                  <p className="text-xs text-[var(--hub-text-muted)] max-w-3xl">
+                    {L(
+                      "Select a complete architectural direction below. Admin controls the site's design direction, palette, typography pairing, and glass surface defaults while visitors get clean Light/Dark and Font Size controls.",
+                      "اختر اتجاهاً تصميمياً متكاملاً للموقع من لوحة الإدارة، بينما يمتلك الزوار أدوات التبديل السريع بين الفاتح/الداكن وتكبير/تصغير الخط.",
+                      lang
+                    )}
+                  </p>
+                </div>
+                <div className="text-xs font-mono text-[var(--hub-text-muted)]">
+                  #{String(selectedDirection.order).padStart(2, "0")} · {loc(selectedDirection.name, lang)}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {DESIGN_THEMES.map((item) => {
+                  const active = item.id === designThemeId;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      data-testid={`admin-theme-option-${item.id}`}
+                      onClick={() => handleSelectAdminDirection(item.id)}
+                      style={{
+                        backgroundColor: item.tokens.surfaceElevated,
+                        borderColor: active ? item.tokens.secondary : item.tokens.border,
+                        color: item.tokens.text,
+                        borderRadius: item.geometry.cardRadius,
+                      }}
+                      className={`text-start p-3.5 border transition-colors cursor-pointer flex flex-col justify-between gap-2.5 ${
+                        active ? "ring-2 ring-offset-1 ring-[var(--hub-secondary)]" : ""
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            style={{ color: item.tokens.textMuted }}
+                            className="text-[11px] font-mono tabular-nums"
+                          >
+                            {String(item.order).padStart(2, "0")} · {item.polarity.toUpperCase()} · {loc(item.geometry.styleLabel, lang)}
+                          </span>
+                          <div className="flex items-center gap-1" aria-hidden="true">
+                            <span
+                              className="w-3 h-3 rounded-full border"
+                              style={{ backgroundColor: item.tokens.bg, borderColor: item.tokens.border }}
+                            />
+                            <span
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: item.tokens.secondary }}
+                            />
+                            {active && <Check className="w-3.5 h-3.5 ms-0.5" style={{ color: item.tokens.secondary }} />}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{ fontFamily: item.fonts.display, color: item.tokens.text }}
+                          className="text-base font-bold leading-snug"
+                        >
+                          {loc(item.name, lang)}
+                        </div>
+
+                        <div style={{ color: item.tokens.secondary }} className="text-[11px] font-semibold">
+                          {loc(item.directionTagline, lang)}
+                        </div>
+
+                        <p
+                          style={{ fontFamily: item.fonts.body, color: item.tokens.textMuted }}
+                          className="text-[11px] leading-relaxed line-clamp-2"
+                        >
+                          {loc(item.directionGuide, lang)}
+                        </p>
+                      </div>
+
+                      <div
+                        style={{ borderColor: item.tokens.border, color: item.tokens.textMuted }}
+                        className="pt-2 border-t flex items-center justify-between gap-2 text-[10px] font-mono"
+                      >
+                        <span className="truncate">{item.fonts.label}</span>
+                        <span className="shrink-0 font-sans font-semibold" style={{ color: item.tokens.secondary }}>
+                          {loc(item.idealFor, lang)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Site Identity & Color Accents */}
+            <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+              <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+                <Palette className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>{L("Site Identity & Accent Overrides", "هوية الموقع والألوان المخصصة", lang)}</span>
+              </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -436,14 +621,132 @@ export const SiteSettingsPanel: React.FC<{
                 </div>
               </div>
             </div>
-          </section>
+            </section>
+          </div>
+        )}
 
-          {/* Author Portrait & Identity */}
-          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
-            <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
-              <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>{L("Author Portrait & Public Profile", "صورة الكاتب والملف التعريفي", lang)}</span>
-            </h2>
+        {/* SUB-TAB 3: Specific Site Controls (Typography Scale, Breadcrumbs, Progress, Search, Domain) */}
+        {settingsSubTab === "controls" && (
+          <section
+            data-testid="specific-site-controls"
+            className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-6"
+          >
+            <div className="space-y-1">
+              <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-[var(--hub-secondary)]" />
+                <span>{L("Specific Site & Reader Controls", "إعدادات الموقع والقراءة الدقيقة", lang)}</span>
+              </h2>
+              <p className="text-xs text-[var(--hub-text-muted)]">
+                {L(
+                  "Configure default reader typography scale, navigation breadcrumbs, reading progress indicator, and keyboard-first global search visibility.",
+                  "تحديد حجم الخط الافتراضي للقراءة وتفعيل مسار التنقل وشريط تقدم القراءة والبحث الشامل.",
+                  lang
+                )}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="set-default-font-scale" className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Default Reader Font Size", "حجم الخط الافتراضي للزوار", lang)}
+                </label>
+                <select
+                  id="set-default-font-scale"
+                  data-testid="admin-default-font-scale"
+                  value={defaultFontScale}
+                  onChange={(e) => setDefaultFontScale(normalizeFontScale(e.target.value))}
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
+                >
+                  {(Object.keys(FONT_SCALES) as FontScale[]).map((scaleId) => {
+                    const def = FONT_SCALES[scaleId];
+                    return (
+                      <option key={scaleId} value={scaleId}>
+                        {loc(def.label, lang)} ({def.rootFontSizePx}px)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Default Site Polarity", "وضع السطوع الافتراضي", lang)}
+                </label>
+                <div className="px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm font-mono">
+                  {defaultTheme === "dark" ? L("Dark Mode", "الوضع الداكن", lang) : L("Light Mode", "الوضع الفاتح", lang)}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Active Design System", "النظام التصميمي النشط", lang)}
+                </label>
+                <div className="px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm truncate">
+                  {loc(selectedDirection.name, lang)}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-[var(--hub-border)]">
+              <label className="rounded-xl border border-[var(--hub-border)] hub-subtle p-4 flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  data-testid="toggle-show-breadcrumbs"
+                  checked={showBreadcrumbs}
+                  onChange={(e) => setShowBreadcrumbs(e.target.checked)}
+                  className="mt-1"
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-semibold">{L("Dynamic Breadcrumbs", "مسار التنقل الهرمي", lang)}</span>
+                  <span className="block text-xs text-[var(--hub-text-muted)]">
+                    {L("Show hierarchical route breadcrumb trail under the header.", "إظهار شريط المسار التفصيلي أسفل الرأسية.", lang)}
+                  </span>
+                </span>
+              </label>
+
+              <label className="rounded-xl border border-[var(--hub-border)] hub-subtle p-4 flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  data-testid="toggle-show-reading-progress"
+                  checked={showReadingProgress}
+                  onChange={(e) => setShowReadingProgress(e.target.checked)}
+                  className="mt-1"
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-semibold">{L("Reading Progress Bar", "شريط تقدم القراءة", lang)}</span>
+                  <span className="block text-xs text-[var(--hub-text-muted)]">
+                    {L("Show fixed viewport scroll progress on articles & issues.", "إظهار شريط تقدم القراءة أعلى المقالات والأعداد.", lang)}
+                  </span>
+                </span>
+              </label>
+
+              <label className="rounded-xl border border-[var(--hub-border)] hub-subtle p-4 flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  data-testid="toggle-enable-global-search"
+                  checked={enableGlobalSearch}
+                  onChange={(e) => setEnableGlobalSearch(e.target.checked)}
+                  className="mt-1"
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-sm font-semibold">{L("Global Search (Ctrl+K)", "البحث الشامل السريع", lang)}</span>
+                  <span className="block text-xs text-[var(--hub-text-muted)]">
+                    {L("Enable the Ctrl+K search modal & header trigger.", "تفعيل نافذة البحث الشامل واختصار لوحة المفاتيح.", lang)}
+                  </span>
+                </span>
+              </label>
+            </div>
+          </section>
+        )}
+
+        {/* SUB-TAB 2: Primary Author Identity + Contact + Custom Internal Profiles */}
+        {settingsSubTab === "profiles" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Author Portrait & Identity */}
+              <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+                <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+                  <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>{L("Author Portrait & Public Profile", "صورة الكاتب والملف التعريفي", lang)}</span>
+                </h2>
 
             {/* Portrait uploader + live preview */}
             <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-3.5 flex flex-col sm:flex-row sm:items-center gap-4">
@@ -745,9 +1048,21 @@ export const SiteSettingsPanel: React.FC<{
                 </div>
               ))}
             </div>
-          </section>
+              </section>
+            </div>
 
-          {/* SEO Engine Improver */}
+            <InternalProfilesEditor
+              data={data}
+              lang={lang}
+              onUpdateData={onUpdateData}
+              onNotify={onNotify}
+              onAudit={onAudit}
+            />
+          </div>
+        )}
+
+        {/* SUB-TAB 4: SEO Engine Improver */}
+        {settingsSubTab === "seo" && (
           <section
             data-testid="seo-engine-panel"
             className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4"
@@ -898,37 +1213,42 @@ export const SiteSettingsPanel: React.FC<{
               </button>
             </div>
           </section>
-        </div>
+        )}
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            className="px-5 py-2.5 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-sm font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <Check className="w-4 h-4" />
-            <span>{L("Save All Site Settings", "حفظ جميع إعدادات الموقع", lang)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onDownloadJson("website.json", data.website)}
-            className="px-4 py-2.5 rounded-lg border border-[var(--hub-border)] text-sm inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            <span>{L("Export website.json", "تصدير website.json", lang)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onDownloadJson("profile.json", data.profileSettings)}
-            className="px-4 py-2.5 rounded-lg border border-[var(--hub-border)] text-sm inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            <span>{L("Export profile.json", "تصدير profile.json", lang)}</span>
-          </button>
-        </div>
-      </form>
+        {settingsSubTab !== "security" && (
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => handleSaveSiteSettings()}
+              data-testid="save-all-site-settings-btn"
+              className="px-5 py-2.5 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-sm font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              <span>{L("Save All Site Settings", "حفظ جميع إعدادات الموقع", lang)}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onDownloadJson("website.json", data.website)}
+              className="px-4 py-2.5 rounded-lg border border-[var(--hub-border)] text-sm inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>{L("Export website.json", "تصدير website.json", lang)}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onDownloadJson("profile.json", data.profileSettings)}
+              className="px-4 py-2.5 rounded-lg border border-[var(--hub-border)] text-sm inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>{L("Export profile.json", "تصدير profile.json", lang)}</span>
+            </button>
+          </div>
+        )}
+      </div>
 
-      {/* Admin Security Credentials + Registered Operators */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* SUB-TAB 5: Admin Security Credentials + Registered Operators */}
+      {settingsSubTab === "security" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <form
           onSubmit={handleUpdatePassphrase}
           className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4"
@@ -1040,9 +1360,10 @@ export const SiteSettingsPanel: React.FC<{
                 </li>
               );
             })}
-          </ul>
-        </section>
-      </div>
+            </ul>
+          </section>
+        </div>
+      )}
     </div>
   );
 };

@@ -69,7 +69,7 @@ export const ContactPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data,
                   href={safeUrl(c.linkedin)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                  className="inline-flex items-center gap-1 text-[var(--hub-secondary)] hover:underline"
                 >
                   <span>{L("Profile", "الملف المهني", lang)}</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
@@ -86,7 +86,7 @@ export const ContactPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data,
                     href={u}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                    className="inline-flex items-center gap-1 text-[var(--hub-secondary)] hover:underline"
                   >
                     <span>{u}</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
@@ -97,7 +97,7 @@ export const ContactPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data,
             <li>
               <span className="font-semibold">{L("Email", "البريد الإلكتروني", lang)}:</span>{" "}
               {c.email ? (
-                <a href={`mailto:${c.email}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                <a href={`mailto:${c.email}`} className="text-[var(--hub-secondary)] hover:underline">
                   {c.email}
                 </a>
               ) : (

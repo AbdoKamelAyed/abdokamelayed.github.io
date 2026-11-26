@@ -112,11 +112,12 @@ export function summarizeMonthlyContributions(contributions: GitHubContributions
 }
 
 export interface SearchHit {
-  type: "project" | "repository" | "article" | "knowledge" | "experience";
+  type: "project" | "repository" | "article" | "knowledge" | "experience" | "issue";
   id: string;
   title: string;
   subtitle: string;
   meta: string;
+  tags?: string[];
   route: string;
 }
 
@@ -129,29 +130,22 @@ export function buildSearchIndex(data: HubDatasets, lang: Lang): SearchHit[] {
       id: p.id,
       title: loc(p.name, lang),
       subtitle: loc(p.shortDescription, lang),
-      meta: [p.category, p.status, ...p.techStack].join(" "),
+      meta: [p.category, p.status, ...p.techStack, loc(p.fullDescription, lang).slice(0, 260)].join(" "),
+      tags: p.techStack.slice(0, 4),
       route: `#/projects/${encodeURIComponent(p.slug || p.id)}`,
     });
   }
 
-  for (const r of data.github.repositories) {
-    hits.push({
-      type: "repository",
-      id: r.id,
-      title: r.name,
-      subtitle: r.description || "",
-      meta: [r.primaryLanguage || "", ...(r.topics || [])].join(" "),
-      route: "#/github",
-    });
-  }
-
   for (const a of data.articles) {
+    const abstractText = a.abstract ? loc(a.abstract, lang) : "";
+    const bodyExcerpt = loc(a.content, lang).replace(/[#*`>\[\]()]/g, " ").slice(0, 320);
     hits.push({
       type: "article",
       id: a.id,
       title: loc(a.title, lang),
-      subtitle: loc(a.subtitle, lang),
-      meta: [...a.categories, ...a.tags].join(" "),
+      subtitle: loc(a.subtitle, lang) || abstractText,
+      meta: [...a.categories, ...a.tags, abstractText, bodyExcerpt].join(" "),
+      tags: a.tags.slice(0, 4),
       route: `#/journal/${encodeURIComponent(a.slug || a.id)}`,
     });
   }
@@ -162,8 +156,33 @@ export function buildSearchIndex(data: HubDatasets, lang: Lang): SearchHit[] {
       id: k.id,
       title: loc(k.title, lang),
       subtitle: loc(k.summary, lang),
-      meta: [k.category, ...k.tags, k.sourceAttribution].join(" "),
+      meta: [k.category, k.entryType, ...k.tags, k.sourceAttribution].join(" "),
+      tags: k.tags.slice(0, 4),
       route: "#/knowledge",
+    });
+  }
+
+  for (const iss of data.issues || []) {
+    hits.push({
+      type: "issue",
+      id: iss.id,
+      title: `${iss.issueNumber} — ${loc(iss.title, lang)}`,
+      subtitle: loc(iss.subtitle, lang),
+      meta: [iss.cadence, iss.periodKey, ...(iss.topics || []), loc(iss.editorialNote, lang)].join(" "),
+      tags: (iss.topics || []).slice(0, 4),
+      route: `#/journal/issues/${encodeURIComponent(iss.slug || iss.id)}`,
+    });
+  }
+
+  for (const r of data.github.repositories) {
+    hits.push({
+      type: "repository",
+      id: r.id,
+      title: r.name,
+      subtitle: r.description || "",
+      meta: [r.primaryLanguage || "", ...(r.topics || [])].join(" "),
+      tags: [r.primaryLanguage || "", ...(r.topics || []).slice(0, 3)].filter(Boolean),
+      route: "#/github",
     });
   }
 
@@ -174,6 +193,7 @@ export function buildSearchIndex(data: HubDatasets, lang: Lang): SearchHit[] {
       title: loc(e.role, lang),
       subtitle: `${loc(e.organization, lang)} — ${loc(e.summary, lang)}`,
       meta: (e.skills || []).join(" "),
+      tags: (e.skills || []).slice(0, 4),
       route: "#/work",
     });
   }
@@ -181,14 +201,48 @@ export function buildSearchIndex(data: HubDatasets, lang: Lang): SearchHit[] {
   return hits;
 }
 
+function scoreSearchHit(hit: SearchHit, terms: string[]): number {
+  if (terms.length === 0) return 1;
+  const titleLow = hit.title.toLowerCase();
+  const subLow = hit.subtitle.toLowerCase();
+  const metaLow = hit.meta.toLowerCase();
+  const combined = `${titleLow} ${subLow} ${metaLow}`;
+
+  for (const term of terms) {
+    if (!combined.includes(term)) return 0;
+  }
+
+  let score = 0;
+  const fullQuery = terms.join(" ");
+  if (titleLow === fullQuery) score += 120;
+  else if (titleLow.startsWith(fullQuery)) score += 75;
+  else if (titleLow.includes(fullQuery)) score += 50;
+
+  for (const term of terms) {
+    if (titleLow.includes(term)) score += 30;
+    else if (subLow.includes(term)) score += 16;
+    else if (metaLow.includes(term)) score += 8;
+  }
+  return score;
+}
+
 export function searchDocuments(hits: SearchHit[], query: string, category: string): SearchHit[] {
-  const q = query.trim().toLowerCase();
-  return hits
-    .filter((h) => category === "all" || h.type === category)
-    .filter((h) => {
-      if (!q) return true;
-      return `${h.title} ${h.subtitle} ${h.meta}`.toLowerCase().includes(q);
-    })
+  const terms = query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const byCategory = hits.filter((h) => category === "all" || h.type === category);
+  if (terms.length === 0) {
+    return byCategory.slice(0, 24);
+  }
+
+  return byCategory
+    .map((hit) => ({ hit, score: scoreSearchHit(hit, terms) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((entry) => entry.hit)
     .slice(0, 24);
 }
 
@@ -252,18 +306,35 @@ export function calculateReadingTimeMinutes(
   return Math.max(1, Math.ceil(words / wordsPerMinute));
 }
 
+export function calculateScrollProgressState(
+  scrollY: number,
+  targetBottomInDoc: number,
+  viewportHeight: number,
+  documentScrollHeight: number
+): { progress: number; scrollable: boolean } {
+  const docMax = Math.max(0, documentScrollHeight - viewportHeight);
+  const targetBottomMax = Math.max(0, targetBottomInDoc - viewportHeight);
+  const targetMax =
+    targetBottomMax > 0 ? Math.min(targetBottomMax, docMax || targetBottomMax) : docMax;
+  if (targetMax <= 0) {
+    return { progress: 0, scrollable: false };
+  }
+  const clamped = Math.max(0, Math.min(1, scrollY / targetMax));
+  return { progress: Math.round(clamped * 100), scrollable: true };
+}
+
 export function calculateArticleScrollProgress(
   scrollY: number,
   articleBottomInDoc: number,
   viewportHeight: number,
   documentScrollHeight: number
 ): number {
-  const docMax = Math.max(0, documentScrollHeight - viewportHeight);
-  const articleMax = Math.max(0, articleBottomInDoc - viewportHeight);
-  const targetMax = articleMax > 0 ? Math.min(articleMax, docMax || articleMax) : docMax;
-  if (targetMax <= 0) return 0;
-  const clamped = Math.max(0, Math.min(1, scrollY / targetMax));
-  return Math.round(clamped * 100);
+  return calculateScrollProgressState(
+    scrollY,
+    articleBottomInDoc,
+    viewportHeight,
+    documentScrollHeight
+  ).progress;
 }
 
 export function getRelatedArticles(

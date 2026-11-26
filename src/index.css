@@ -10,6 +10,10 @@
   --hub-text-muted: #475569;
   --hub-primary: #0f172a;
   --hub-secondary: #2563eb;
+  --hub-card-radius: 14px;
+  --hub-control-radius: 8px;
+  --hub-border-width: 1px;
+  --hub-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   --font-display: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, sans-serif;
   --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-ar: "Cairo", "Plus Jakarta Sans", system-ui, sans-serif;
@@ -24,16 +28,6 @@
   --hub-text: #f1f5f9;
   --hub-text-muted: #94a3b8;
   --hub-primary: #f8fafc;
-}
-
-[data-glass="true"] {
-  --hub-surface: rgba(248, 250, 252, 0.7);
-  --hub-surface-elevated: rgba(255, 255, 255, 0.72);
-}
-
-.dark[data-glass="true"] {
-  --hub-surface: rgba(17, 21, 29, 0.72);
-  --hub-surface-elevated: rgba(21, 26, 36, 0.74);
 }
 
 @layer base {
@@ -69,16 +63,81 @@
   }
 }
 
+.hub-canvas {
+  background-color: var(--hub-bg);
+}
+
+[data-theme-pattern="blueprint-grid"] .hub-canvas {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--hub-border) 38%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--hub-border) 38%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+[data-theme-pattern="dot-matrix"] .hub-canvas {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--hub-text-muted) 22%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 18px 18px;
+}
+
+[data-theme-pattern="warm-rule"] .hub-canvas {
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--hub-border) 24%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 100% 34px;
+}
+
+[data-theme-pattern="radial-glow"] .hub-canvas {
+  background-image:
+    radial-gradient(ellipse 75% 45% at 50% -10%, color-mix(in srgb, var(--hub-secondary) 14%, transparent), transparent),
+    radial-gradient(ellipse 60% 40% at 88% 12%, color-mix(in srgb, var(--hub-primary) 7%, transparent), transparent);
+}
+
 .hub-surface {
   background-color: var(--hub-surface-elevated);
   border-color: var(--hub-border);
+  border-width: var(--hub-border-width);
+  box-shadow: var(--hub-card-shadow);
   backdrop-filter: blur(12px);
 }
 
 .hub-subtle {
   background-color: var(--hub-surface);
   border-color: var(--hub-border);
+  border-width: var(--hub-border-width);
   backdrop-filter: blur(8px);
+}
+
+header.hub-surface,
+footer.hub-subtle {
+  box-shadow: none;
+  border-width: 0;
+}
+
+header.hub-surface {
+  border-bottom-width: var(--hub-border-width);
+}
+
+footer.hub-subtle {
+  border-top-width: var(--hub-border-width);
+}
+
+#main-content .rounded-2xl {
+  border-radius: var(--hub-card-radius);
+}
+
+#main-content .rounded-xl {
+  border-radius: calc(var(--hub-card-radius) * 0.72);
+}
+
+#main-content .rounded-lg,
+header button.rounded-lg,
+header a.rounded-lg {
+  border-radius: var(--hub-control-radius);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -120,12 +179,14 @@
     print-color-adjust: exact;
   }
 
-  /* Hide site navigation, site footer, reading progress bar, and non-article chrome */
+  /* Hide site navigation, site footer, breadcrumbs, reading progress bar, and non-article chrome */
   #root > div > header,
   #root > div > footer,
   nav,
+  [data-testid="breadcrumb-nav"],
   a[href="#main-content"],
   [data-testid="reading-progress-bar"],
+  [data-testid="print-article-btn"],
   [data-testid="article-lightbox"],
   [data-testid="article-toc"],
   [role="progressbar"],
@@ -135,10 +196,12 @@
   }
 
   #root > div,
+  .hub-canvas,
   .hub-surface,
   .hub-subtle {
     background: transparent !important;
     background-color: transparent !important;
+    background-image: none !important;
     backdrop-filter: none !important;
     box-shadow: none !important;
     min-height: auto !important;
@@ -259,13 +322,18 @@
     border-color: #cbd5e1 !important;
   }
 
-  article img {
+  article img:not(.rounded-full) {
     max-height: 75mm !important;
     width: 100% !important;
     height: auto !important;
     object-fit: cover;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  article img.rounded-full {
+    max-height: 16mm !important;
+    max-width: 16mm !important;
   }
 
   article a[href^="http"] {
