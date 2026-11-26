@@ -2,6 +2,127 @@
   "id": "gh-activity-collection",
   "items": [
     {
+      "id": "gh-event-28319307669",
+      "type": "PushEvent",
+      "repo": "AbdoKamelAyed/abdokamelayed.github.io",
+      "summary": "Pushed updates to AbdoKamelAyed/abdokamelayed.github.io",
+      "url": "https://github.com/AbdoKamelAyed/abdokamelayed.github.io",
+      "createdAt": "2026-11-25T11:09:58Z",
+      "updatedAt": "2026-11-25T11:09:58Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28315470410",
+      "type": "PushEvent",
+      "repo": "AbdoKamelAyed/abdokamelayed.github.io",
+      "summary": "Pushed updates to AbdoKamelAyed/abdokamelayed.github.io",
+      "url": "https://github.com/AbdoKamelAyed/abdokamelayed.github.io",
+      "createdAt": "2026-11-25T10:03:59Z",
+      "updatedAt": "2026-11-25T10:03:59Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28283220359",
+      "type": "PushEvent",
+      "repo": "dusureg/internalsys",
+      "summary": "Pushed updates to dusureg/internalsys",
+      "url": "https://github.com/dusureg/internalsys",
+      "createdAt": "2026-11-24T21:59:15Z",
+      "updatedAt": "2026-11-24T21:59:15Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28278545049",
+      "type": "PushEvent",
+      "repo": "dusureg/internalsys",
+      "summary": "Pushed updates to dusureg/internalsys",
+      "url": "https://github.com/dusureg/internalsys",
+      "createdAt": "2026-11-24T22:14:29Z",
+      "updatedAt": "2026-11-24T22:14:29Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28277165342",
+      "type": "PushEvent",
+      "repo": "AbdoKamelAyed/abdokamelayed.github.io",
+      "summary": "Pushed updates to AbdoKamelAyed/abdokamelayed.github.io",
+      "url": "https://github.com/AbdoKamelAyed/abdokamelayed.github.io",
+      "createdAt": "2026-11-25T09:50:22Z",
+      "updatedAt": "2026-11-25T09:50:22Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28273108379",
+      "type": "PushEvent",
+      "repo": "AbdoKamelAyed/Textfzication",
+      "summary": "Pushed updates to AbdoKamelAyed/Textfzication",
+      "url": "https://github.com/AbdoKamelAyed/Textfzication",
+      "createdAt": "2026-11-24T21:29:23Z",
+      "updatedAt": "2026-11-24T21:29:23Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28271430668",
+      "type": "PushEvent",
+      "repo": "dusureg/internalsys",
+      "summary": "Pushed updates to dusureg/internalsys",
+      "url": "https://github.com/dusureg/internalsys",
+      "createdAt": "2026-11-24T21:59:17Z",
+      "updatedAt": "2026-11-24T21:59:17Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28248524969",
+      "type": "PushEvent",
+      "repo": "dusureg/Pysys",
+      "summary": "Pushed updates to dusureg/Pysys",
+      "url": "https://github.com/dusureg/Pysys",
+      "createdAt": "2026-11-23T22:28:14Z",
+      "updatedAt": "2026-11-23T22:28:14Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28247876617",
+      "type": "PushEvent",
+      "repo": "AbdoKamelAyed/Textfzication",
+      "summary": "Pushed updates to AbdoKamelAyed/Textfzication",
+      "url": "https://github.com/AbdoKamelAyed/Textfzication",
+      "createdAt": "2026-11-24T16:58:19Z",
+      "updatedAt": "2026-11-24T16:58:19Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28243583073",
+      "type": "PushEvent",
+      "repo": "AbdoKamelAyed/Textfzication",
+      "summary": "Pushed updates to AbdoKamelAyed/Textfzication",
+      "url": "https://github.com/AbdoKamelAyed/Textfzication",
+      "createdAt": "2026-11-24T16:28:09Z",
+      "updatedAt": "2026-11-24T16:28:09Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
+      "id": "gh-event-28242425827",
+      "type": "PushEvent",
+      "repo": "dusureg/internalsys",
+      "summary": "Pushed updates to dusureg/internalsys",
+      "url": "https://github.com/dusureg/internalsys",
+      "createdAt": "2026-11-24T22:14:32Z",
+      "updatedAt": "2026-11-24T22:14:32Z",
+      "status": "public",
+      "source": "github-rest-events"
+    },
+    {
       "id": "gh-event-28210871914",
       "type": "PushEvent",
       "repo": "AbdoKamelAyed/Textfzication",
@@ -2378,8 +2499,8 @@
       "source": "github-rest-events"
     }
   ],
-  "createdAt": "2026-11-25T09:39:17.285Z",
-  "updatedAt": "2026-11-25T09:39:17.285Z",
+  "createdAt": "2026-11-26T12:22:03.722Z",
+  "updatedAt": "2026-11-26T12:22:03.722Z",
   "status": "synced",
   "source": "github-rest-events"
 }
