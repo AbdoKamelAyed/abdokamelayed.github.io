@@ -7,17 +7,25 @@ export const WorkPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
 
   return (
     <div className="space-y-12">
-      <header className="border-b border-[var(--hub-border)] pb-6 space-y-2">
-        <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
-          {t("work.title", lang)}
-        </h1>
-        <p className="text-base text-[var(--hub-text-muted)] max-w-3xl">
-          {t("work.subtitle", lang)}
-        </p>
+      <header className="border-b border-[var(--hub-border)] pb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">
+            {t("work.title", lang)}
+          </h1>
+          <p className="text-base text-[var(--hub-text-muted)] max-w-3xl">
+            {t("work.subtitle", lang)}
+          </p>
+        </div>
+        <a
+          href="#/now"
+          className="px-4 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold hover:border-[var(--hub-secondary)] whitespace-nowrap"
+        >
+          {t("nav.now", lang)} →
+        </a>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <section className="lg:col-span-7 rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-5">
+        <section className="lg:col-span-7 min-w-0 overflow-hidden rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-5">
           <h2 className="font-display text-xl font-semibold">
             {L("Chronological Experience", "السجل المهني والعملي", lang)}
           </h2>
@@ -26,17 +34,17 @@ export const WorkPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
           ) : (
             <div className="divide-y divide-[var(--hub-border)]">
               {exp.items.map((item) => (
-                <article key={item.id} className="py-4 first:pt-0 last:pb-0 space-y-2">
+                <article key={item.id} className="py-4 first:pt-0 last:pb-0 space-y-2 min-w-0">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <h3 className="font-display text-lg font-semibold">{loc(item.role, lang)}</h3>
+                    <h3 className="font-display text-lg font-semibold break-words">{loc(item.role, lang)}</h3>
                     <span className="text-xs font-mono text-[var(--hub-text-muted)]">{item.period}</span>
                   </div>
-                  <div className="text-xs text-[var(--hub-text-muted)]">
+                  <div className="text-xs text-[var(--hub-text-muted)] break-words">
                     {loc(item.organization, lang)} · {item.kind} · {loc(item.location, lang)}
                   </div>
-                  <p className="text-sm text-[var(--hub-text)] leading-relaxed">{loc(item.summary, lang)}</p>
+                  <p className="text-sm text-[var(--hub-text)] leading-relaxed break-words">{loc(item.summary, lang)}</p>
                   {item.skills.length > 0 && (
-                    <div className="text-xs font-mono text-[var(--hub-secondary)]">
+                    <div className="text-xs font-mono text-[var(--hub-secondary)] break-words [overflow-wrap:anywhere]">
                       {item.skills.join(" · ")}
                     </div>
                   )}
@@ -46,22 +54,22 @@ export const WorkPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
           )}
         </section>
 
-        <aside className="lg:col-span-5 space-y-6">
-          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-5">
+        <aside className="lg:col-span-5 min-w-0 space-y-6">
+          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-5 min-w-0 overflow-hidden">
             <h2 className="font-display text-xl font-semibold">
               {L("Technical Skills", "المهارات التقنية", lang)}
             </h2>
             {exp.skills.map((grp, idx) => (
               <div key={idx} className="space-y-1.5 pb-4 last:pb-0 border-b last:border-b-0 border-[var(--hub-border)]">
                 <h3 className="text-sm font-semibold">{loc(grp.group, lang)}</h3>
-                <p className="text-xs font-mono text-[var(--hub-text-muted)] leading-relaxed">
+                <p className="text-xs font-mono text-[var(--hub-text-muted)] leading-relaxed break-words [overflow-wrap:anywhere]">
                   {grp.items.join(" · ")}
                 </p>
               </div>
             ))}
           </section>
 
-          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-4 min-w-0 overflow-hidden">
             <h2 className="font-display text-xl font-semibold">
               {L("Knowledge Areas & Research", "مجالات المعرفة والأبحاث", lang)}
             </h2>
@@ -69,13 +77,13 @@ export const WorkPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, la
               <h3 className="text-xs font-semibold text-[var(--hub-text-muted)] mb-1">
                 {L("Knowledge Areas", "مجالات المعرفة", lang)}
               </h3>
-              <p className="text-sm">{exp.knowledgeAreas.join(" · ") || t("common.empty", lang)}</p>
+              <p className="text-sm break-words">{exp.knowledgeAreas.join(" · ") || t("common.empty", lang)}</p>
             </div>
             <div className="pt-3 border-t border-[var(--hub-border)]">
               <h3 className="text-xs font-semibold text-[var(--hub-text-muted)] mb-1">
                 {L("Research Interests", "الاهتمامات البحثية", lang)}
               </h3>
-              <p className="text-sm">{exp.researchInterests.join(" · ") || t("common.empty", lang)}</p>
+              <p className="text-sm break-words">{exp.researchInterests.join(" · ") || t("common.empty", lang)}</p>
             </div>
           </section>
         </aside>

@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import type { HubDatasets, Lang } from "../types/hub";
 import { safeUrl } from "../utils/analytics";
 import { formatDate, L, loc, t } from "../utils/i18n";
+import { SocialSharePanel } from "../components/SocialSharePanel";
 
 export const ProjectDetailPage: React.FC<{
   data: HubDatasets;
@@ -113,48 +114,48 @@ export const ProjectDetailPage: React.FC<{
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-7 space-y-6">
-          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+        <div className="lg:col-span-7 min-w-0 space-y-6">
+          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-4 min-w-0 overflow-hidden">
             <h2 className="font-display text-xl font-semibold">{L("Overview & Context", "نظرة عامة والسياق", lang)}</h2>
-            <p className="text-sm sm:text-base leading-relaxed text-[var(--hub-text)]">
+            <p className="text-sm sm:text-base leading-relaxed text-[var(--hub-text)] break-words">
               {loc(project.fullDescription, lang)}
             </p>
             {project.problemStatement && (
               <div className="pt-4 border-t border-[var(--hub-border)]">
                 <h3 className="text-sm font-semibold mb-1">{L("Problem Statement", "بيان المشكلة", lang)}</h3>
-                <p className="text-sm text-[var(--hub-text-muted)]">{project.problemStatement}</p>
+                <p className="text-sm text-[var(--hub-text-muted)] break-words">{project.problemStatement}</p>
               </div>
             )}
             {project.architectureOverview && (
               <div className="pt-4 border-t border-[var(--hub-border)]">
                 <h3 className="text-sm font-semibold mb-1">{L("Architecture Overview", "نظرة معمارية", lang)}</h3>
-                <p className="text-sm text-[var(--hub-text-muted)]">{project.architectureOverview}</p>
+                <p className="text-sm text-[var(--hub-text-muted)] break-words">{project.architectureOverview}</p>
               </div>
             )}
             {project.documentation && (
               <div className="pt-4 border-t border-[var(--hub-border)]">
                 <h3 className="text-sm font-semibold mb-1">{L("Documentation", "التوثيق", lang)}</h3>
-                <p className="text-sm text-[var(--hub-text-muted)]">{project.documentation}</p>
+                <p className="text-sm text-[var(--hub-text-muted)] break-words">{project.documentation}</p>
               </div>
             )}
           </section>
 
           {(project.developmentHistory || []).length > 0 && (
-            <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-3">
+            <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-3 min-w-0 overflow-hidden">
               <h2 className="font-display text-xl font-semibold">{L("Development History", "سجل التطوير", lang)}</h2>
               <ul className="space-y-2 text-sm text-[var(--hub-text-muted)] list-disc ps-5">
                 {project.developmentHistory!.map((item, idx) => (
-                  <li key={idx}>{item}</li>
+                  <li key={idx} className="break-words">{item}</li>
                 ))}
               </ul>
             </section>
           )}
         </div>
 
-        <aside className="lg:col-span-5 space-y-6">
-          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+        <aside className="lg:col-span-5 min-w-0 space-y-6">
+          <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-4 min-w-0 overflow-hidden">
             <h2 className="font-display text-xl font-semibold">{L("Technical Stack & Scope", "التقنيات والنطاق", lang)}</h2>
-            <p className="text-sm font-mono text-[var(--hub-text-muted)]">
+            <p className="text-sm font-mono text-[var(--hub-text-muted)] break-words [overflow-wrap:anywhere]">
               {project.techStack.join(" · ") || t("common.na", lang)}
             </p>
 
@@ -163,7 +164,7 @@ export const ProjectDetailPage: React.FC<{
                 <h3 className="text-sm font-semibold mb-2">{L("Key Features", "المزايا الرئيسية", lang)}</h3>
                 <ul className="space-y-1.5 text-sm text-[var(--hub-text-muted)] list-disc ps-5">
                   {project.features!.map((f, i) => (
-                    <li key={i}>{f}</li>
+                    <li key={i} className="break-words">{f}</li>
                   ))}
                 </ul>
               </div>
@@ -174,7 +175,7 @@ export const ProjectDetailPage: React.FC<{
                 <h3 className="text-sm font-semibold mb-2">{L("Objectives", "الأهداف", lang)}</h3>
                 <ul className="space-y-1.5 text-sm text-[var(--hub-text-muted)] list-disc ps-5">
                   {project.objectives!.map((o, i) => (
-                    <li key={i}>{o}</li>
+                    <li key={i} className="break-words">{o}</li>
                   ))}
                 </ul>
               </div>
@@ -185,7 +186,7 @@ export const ProjectDetailPage: React.FC<{
                 <h3 className="text-sm font-semibold mb-2">{L("Releases", "الإصدارات", lang)}</h3>
                 <ul className="space-y-1.5 text-sm text-[var(--hub-text-muted)] list-disc ps-5">
                   {project.releases!.map((r, i) => (
-                    <li key={i}>{r}</li>
+                    <li key={i} className="break-words">{r}</li>
                   ))}
                 </ul>
               </div>
@@ -196,7 +197,7 @@ export const ProjectDetailPage: React.FC<{
                 <h3 className="text-sm font-semibold mb-2">{L("Roadmap", "خارطة الطريق", lang)}</h3>
                 <ul className="space-y-1.5 text-sm text-[var(--hub-text-muted)] list-disc ps-5">
                   {project.roadmap!.map((r, i) => (
-                    <li key={i}>{r}</li>
+                    <li key={i} className="break-words">{r}</li>
                   ))}
                 </ul>
               </div>
@@ -204,7 +205,7 @@ export const ProjectDetailPage: React.FC<{
           </section>
 
           {linkedRepo && (
-            <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-2">
+            <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-2 min-w-0 overflow-hidden">
               <h2 className="font-display text-lg font-semibold">
                 {L("Linked GitHub Repository Data", "بيانات مستودع GitHub المرتبط", lang)}
               </h2>
@@ -215,9 +216,9 @@ export const ProjectDetailPage: React.FC<{
                   lang
                 )}
               </p>
-              <div className="pt-2 text-sm font-mono tabular-nums space-y-1">
-                <div>{linkedRepo.fullName}</div>
-                <div className="text-[var(--hub-text-muted)]">
+              <div className="pt-2 text-sm font-mono tabular-nums space-y-1 min-w-0">
+                <div className="break-words [overflow-wrap:anywhere]">{linkedRepo.fullName}</div>
+                <div className="text-[var(--hub-text-muted)] break-words">
                   ★ {linkedRepo.stars} · Forks {linkedRepo.forks} · Issues {linkedRepo.openIssues} · {linkedRepo.license || "No License"}
                 </div>
               </div>
@@ -225,6 +226,18 @@ export const ProjectDetailPage: React.FC<{
           )}
         </aside>
       </div>
+
+      <SocialSharePanel
+        lang={lang}
+        domain={data.website.domain}
+        hashPath={`#/projects/${encodeURIComponent(project.slug || project.id)}`}
+        title={loc(project.name, lang)}
+        summary={loc(project.shortDescription, lang)}
+        previewImageCandidate={project.screenshots?.[0]}
+        fallbackPreviewImage={data.website.ogImage || data.profileSettings.avatarUrl}
+        tags={project.techStack}
+        siteName={data.website.siteName}
+      />
     </article>
   );
 };

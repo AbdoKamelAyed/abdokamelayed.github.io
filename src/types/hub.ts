@@ -362,6 +362,17 @@ export interface ProfileSettings {
   source: string;
 }
 
+export interface NowWorkItem {
+  id: string;
+  title: LocalizedText;
+  summary: LocalizedText;
+  status?: LocalizedText;
+  focusArea?: LocalizedText;
+  href?: string;
+  tags?: string[];
+  updatedAt?: string;
+}
+
 export interface WebsiteSettings {
   id: string;
   siteName: string;
@@ -383,6 +394,7 @@ export interface WebsiteSettings {
   primaryAccent: string;
   secondaryAccent: string;
   seoDescription: LocalizedText;
+  nowItems?: NowWorkItem[];
   createdAt: string;
   updatedAt: string;
   status: string;

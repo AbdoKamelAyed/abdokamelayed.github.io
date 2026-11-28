@@ -6,10 +6,13 @@ import {
   Code,
   Copy,
   Download,
+  ExternalLink,
   Eye,
+  GitCommitHorizontal,
   Heading2,
   Heading3,
   Italic,
+  KeyRound,
   Layers,
   Link2,
   List,
@@ -20,10 +23,12 @@ import {
   UserCheck,
 } from "lucide-react";
 import type { ArticleRecord, HubDatasets, Lang } from "../../types/hub";
-import { saveLocalDraft } from "../../services/dataService";
-import { calculateReadingTimeMinutes, countWords, slugify } from "../../utils/analytics";
+import { hasLocalDraft, removeLocalDraft, saveLocalDraft, updateDatasetCache } from "../../services/dataService";
+import { resolveGitHubSyncTargetFromSettings, syncLocalDraftsToGitHubRepo } from "../../services/githubStorageService";
+import { calculateReadingTimeMinutes, countWords, slugify, validateCollectionSchema } from "../../utils/analytics";
 import { formatDateTime, L, loc } from "../../utils/i18n";
 import { AuthorAvatar, DEFAULT_AUTHOR_AVATAR } from "../AuthorProfileCard";
+import { LoadingSpinner } from "../LoadingSpinner";
 import { RichContentView } from "../RichContentView";
 
 function toDatetimeLocalValue(iso: string | null | undefined): string {
@@ -59,11 +64,23 @@ export const ArticleRichEditor: React.FC<{
   data: HubDatasets;
   lang: Lang;
   adminUsername: string;
+  githubToken: string;
+  onChangeGithubToken: (token: string) => void;
   onUpdateData: (updater: (prev: HubDatasets) => HubDatasets) => void;
   onNotify: (msg: string) => void;
   onAudit: (action: string, target: string) => void;
   onDownloadJson: (filename: string, payload: unknown) => void;
-}> = ({ data, lang, adminUsername, onUpdateData, onNotify, onAudit, onDownloadJson }) => {
+}> = ({
+  data,
+  lang,
+  adminUsername,
+  githubToken,
+  onChangeGithubToken,
+  onUpdateData,
+  onNotify,
+  onAudit,
+  onDownloadJson,
+}) => {
   const defaultAuthor = data.website.defaultAuthor || loc(data.profileSettings.fullName, "en") || "Abdo Kamel";
   const defaultHandle = data.profileSettings.githubUsername ? `@${data.profileSettings.githubUsername}` : `@${adminUsername}`;
 
@@ -101,8 +118,29 @@ export const ArticleRichEditor: React.FC<{
   const [autoTouchUpdated, setAutoTouchUpdated] = useState(true);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showEmbedPicker, setShowEmbedPicker] = useState(false);
+  const [pushingGithub, setPushingGithub] = useState(false);
+  const [showPatInput, setShowPatInput] = useState(false);
+  const [pushStatus, setPushStatus] = useState<{
+    ok: boolean;
+    message: string;
+    htmlUrl?: string;
+  } | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const patInputRef = useRef<HTMLInputElement | null>(null);
+
+  const syncTarget = useMemo(
+    () =>
+      resolveGitHubSyncTargetFromSettings({
+        storageOwner: data.githubSyncSettings.storageOwner,
+        username: data.githubSyncSettings.username,
+        profileUsername: data.profileSettings.githubUsername,
+        storageRepo: data.githubSyncSettings.storageRepo,
+        storageBranch: data.githubSyncSettings.storageBranch,
+      }),
+    [data.githubSyncSettings, data.profileSettings.githubUsername]
+  );
+  const hasPendingArticlesDraft = hasLocalDraft("./data/journal/articles.json");
 
   const activeContent = editorLang === "en" ? contentEn : contentAr;
   const activeTitle = editorLang === "en" ? titleEn : titleAr;
@@ -171,16 +209,25 @@ export const ArticleRichEditor: React.FC<{
     setUpdatedLocal(toDatetimeLocalValue(art.updatedAt));
   };
 
+  const buildArticlesPayload = (items: ArticleRecord[], ts = new Date().toISOString()) => ({
+    id: "journal-articles-collection",
+    items,
+    createdAt: "2026-11-25T00:00:00Z",
+    updatedAt: ts,
+    status: "active",
+    source: "manual-editorial",
+  });
+
   const persistArticles = (nextRaw: ArticleRecord[], auditAction: string, targetLabel: string) => {
     const ts = new Date().toISOString();
-    const payload = {
-      id: "journal-articles-collection",
-      items: nextRaw,
-      createdAt: "2026-11-25T00:00:00Z",
-      updatedAt: ts,
-      status: "active",
-      source: "manual-editorial",
-    };
+    const payload = buildArticlesPayload(nextRaw, ts);
+    const check = validateCollectionSchema(payload);
+    if (!check.valid) {
+      const errMsg = `Schema error: ${check.errors.join("; ")}`;
+      setPushStatus({ ok: false, message: errMsg });
+      onNotify(errMsg);
+      return null;
+    }
     saveLocalDraft("./data/journal/articles.json", payload);
     onUpdateData((prev) => ({
       ...prev,
@@ -188,13 +235,13 @@ export const ArticleRichEditor: React.FC<{
       articles: nextRaw.filter((a) => a.status === "published"),
     }));
     onAudit(auditAction, targetLabel);
+    return payload;
   };
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
+  const applyFormToArticles = (): { payload: ReturnType<typeof buildArticlesPayload>; label: string } | null => {
     if (!titleEn.trim() || !contentEn.trim()) {
       onNotify(L("English title and body content are required.", "عنوان المقال والمحتوى الإنجليزي مطلوبان.", lang));
-      return;
+      return null;
     }
 
     const nowIso = new Date().toISOString();
@@ -235,36 +282,122 @@ export const ArticleRichEditor: React.FC<{
             }
           : item
       );
-      persistArticles(nextRaw, "Updated Article", titleEn.trim());
-      onNotify(L("Article updated and timestamped.", "تم تحديث المقال وحفظ الطابع الزمني.", lang));
+      const payload = persistArticles(nextRaw, "Updated Article", titleEn.trim());
+      return payload ? { payload, label: titleEn.trim() } : null;
+    }
+
+    const created: ArticleRecord = {
+      id: `art-${resolvedSlug}-${Date.now()}`,
+      slug: resolvedSlug,
+      type,
+      title: { en: titleEn.trim(), ar: titleAr.trim() || titleEn.trim() },
+      subtitle: { en: subtitleEn.trim(), ar: subtitleAr.trim() || subtitleEn.trim() },
+      content: { en: contentEn.trim(), ar: contentAr.trim() || contentEn.trim() },
+      coverImage: coverImage.trim() || undefined,
+      author: author.trim() || defaultAuthor,
+      authorHandle: authorHandle.trim() || undefined,
+      authorAvatar: authorAvatar.trim() || undefined,
+      authorBio: authorBio.trim() ? { en: authorBio.trim(), ar: authorBio.trim() } : undefined,
+      publishedAt: publishedIso,
+      categories: resolvedCategories,
+      tags,
+      readingTimeMinutes: readMin,
+      featured,
+      seo: seoEn.trim() ? { description: seoEn.trim() } : undefined,
+      createdAt: nowIso,
+      updatedAt: updatedIso,
+      status,
+      source: "manual-editorial",
+    };
+    const nextRaw = [created, ...data.allArticlesRaw];
+    const payload = persistArticles(nextRaw, "Created Article", titleEn.trim());
+    if (!payload) return null;
+    setEditingId(created.id);
+    return { payload, label: titleEn.trim() };
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = applyFormToArticles();
+    if (!res) return;
+    onNotify(
+      editingId
+        ? L("Article updated and saved locally.", "تم تحديث المقال وحفظه محلياً.", lang)
+        : L("New article saved to local workspace.", "تم حفظ المقال الجديد في المسودة.", lang)
+    );
+  };
+
+  const handlePushArticlesToGitHub = async (saveFormFirst: boolean) => {
+    let payload: ReturnType<typeof buildArticlesPayload>;
+    if (saveFormFirst) {
+      const saved = applyFormToArticles();
+      if (!saved) return;
+      payload = saved.payload;
     } else {
-      const created: ArticleRecord = {
-        id: `art-${resolvedSlug}-${Date.now()}`,
-        slug: resolvedSlug,
-        type,
-        title: { en: titleEn.trim(), ar: titleAr.trim() || titleEn.trim() },
-        subtitle: { en: subtitleEn.trim(), ar: subtitleAr.trim() || subtitleEn.trim() },
-        content: { en: contentEn.trim(), ar: contentAr.trim() || contentEn.trim() },
-        coverImage: coverImage.trim() || undefined,
-        author: author.trim() || defaultAuthor,
-        authorHandle: authorHandle.trim() || undefined,
-        authorAvatar: authorAvatar.trim() || undefined,
-        authorBio: authorBio.trim() ? { en: authorBio.trim(), ar: authorBio.trim() } : undefined,
-        publishedAt: publishedIso,
-        categories: resolvedCategories,
-        tags,
-        readingTimeMinutes: readMin,
-        featured,
-        seo: seoEn.trim() ? { description: seoEn.trim() } : undefined,
-        createdAt: nowIso,
-        updatedAt: updatedIso,
-        status,
-        source: "manual-editorial",
-      };
-      const nextRaw = [created, ...data.allArticlesRaw];
-      persistArticles(nextRaw, "Created Article", titleEn.trim());
-      setEditingId(created.id);
-      onNotify(L("New article saved to local workspace.", "تم حفظ المقال الجديد في المسودة.", lang));
+      payload = buildArticlesPayload(data.allArticlesRaw);
+      const check = validateCollectionSchema(payload);
+      if (!check.valid) {
+        const errMsg = `Schema error: ${check.errors.join("; ")}`;
+        setPushStatus({ ok: false, message: errMsg });
+        onNotify(errMsg);
+        return;
+      }
+    }
+
+    if (!githubToken.trim()) {
+      setShowPatInput(true);
+      const msg = L(
+        `Enter your session GitHub PAT (contents:write) below to push articles directly to ${syncTarget.owner}/${syncTarget.repo}.`,
+        `أدخل رمز GitHub المؤقت (contents:write) بالأسفل لدفع المقالات مباشرة إلى ${syncTarget.owner}/${syncTarget.repo}.`,
+        lang
+      );
+      setPushStatus({ ok: false, message: msg });
+      onNotify(msg);
+      window.requestAnimationFrame(() => patInputRef.current?.focus());
+      return;
+    }
+
+    setPushingGithub(true);
+    setPushStatus(null);
+    try {
+      const res = await syncLocalDraftsToGitHubRepo({
+        token: githubToken.trim(),
+        owner: syncTarget.owner,
+        repo: syncTarget.repo,
+        branch: syncTarget.branch,
+        drafts: [
+          {
+            datasetPath: "./data/journal/articles.json",
+            repoPath: "public/data/journal/articles.json",
+            payload,
+          },
+        ],
+        commitMessagePrefix: "Publish articles.json",
+        allowOverwrite: true,
+      });
+
+      if (res.synced.length > 0) {
+        updateDatasetCache("./data/journal/articles.json", payload);
+        removeLocalDraft("./data/journal/articles.json");
+        onAudit("Pushed Articles to GitHub", `${syncTarget.owner}/${syncTarget.repo}`);
+        const msg = L(
+          `Pushed ${data.allArticlesRaw.length} article(s) to ${syncTarget.owner}/${syncTarget.repo} (${syncTarget.branch}).`,
+          `تم دفع ${data.allArticlesRaw.length} مقال(ات) بنجاح إلى ${syncTarget.owner}/${syncTarget.repo}.`,
+          lang
+        );
+        setPushStatus({ ok: true, message: msg, htmlUrl: res.synced[0].htmlUrl });
+        onNotify(msg);
+      } else {
+        const errMsg = res.failed[0]?.error || L("Failed to push articles to GitHub.", "تعذر دفع المقالات إلى GitHub.", lang);
+        setPushStatus({ ok: false, message: errMsg });
+        onNotify(errMsg);
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "Failed to push articles to GitHub.";
+      setPushStatus({ ok: false, message: errMsg });
+      onNotify(errMsg);
+    } finally {
+      setPushingGithub(false);
     }
   };
 
@@ -448,23 +581,28 @@ export const ArticleRichEditor: React.FC<{
           })}
         </ul>
 
-        <button
-          type="button"
-          onClick={() =>
-            onDownloadJson("articles.json", {
-              id: "journal-articles-collection",
-              items: data.allArticlesRaw,
-              createdAt: "2026-11-25T00:00:00Z",
-              updatedAt: new Date().toISOString(),
-              status: "active",
-              source: "manual-editorial",
-            })
-          }
-          className="w-full py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>{L("Export articles.json", "تصدير articles.json", lang)}</span>
-        </button>
+        <div className="space-y-2 pt-1">
+          <button
+            type="button"
+            data-testid="article-push-only-github-btn"
+            disabled={pushingGithub}
+            onClick={() => handlePushArticlesToGitHub(false)}
+            className="w-full py-2 rounded-lg bg-[var(--hub-secondary)] text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            {pushingGithub ? <LoadingSpinner size="sm" inline /> : <GitCommitHorizontal className="w-3.5 h-3.5" />}
+            <span>{L("Push All Articles to GitHub", "دفع جميع المقالات إلى GitHub", lang)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onDownloadJson("articles.json", buildArticlesPayload(data.allArticlesRaw))
+            }
+            className="w-full py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{L("Export articles.json", "تصدير articles.json", lang)}</span>
+          </button>
+        </div>
       </aside>
 
       {/* Right: Rich Editor + Metadata + Live Preview */}
@@ -973,34 +1111,124 @@ export const ArticleRichEditor: React.FC<{
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-[var(--hub-border)]">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="submit"
-              className="px-5 py-2.5 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-sm font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <Check className="w-4 h-4" />
-              <span>{editingId ? L("Save Changes", "حفظ التعديلات", lang) : L("Publish / Save Article", "نشر وحفظ المقال", lang)}</span>
-            </button>
-            {editingId && (
+        {/* Actions & Direct GitHub Publishing */}
+        <div className="space-y-4 pt-4 border-t border-[var(--hub-border)]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                className="px-5 py-2.5 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-sm font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>{editingId ? L("Save Local Draft", "حفظ التعديلات محلياً", lang) : L("Save New Draft", "حفظ المسودة الجديدة", lang)}</span>
+              </button>
               <button
                 type="button"
-                onClick={resetForm}
-                className="px-4 py-2.5 rounded-lg border border-[var(--hub-border)] text-sm cursor-pointer"
+                data-testid="article-save-push-github-btn"
+                disabled={pushingGithub}
+                onClick={() => handlePushArticlesToGitHub(true)}
+                className="px-5 py-2.5 rounded-lg bg-[var(--hub-secondary)] text-white text-sm font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                {L("New Blank", "مقال جديد", lang)}
+                {pushingGithub ? <LoadingSpinner size="sm" inline /> : <GitCommitHorizontal className="w-4 h-4" />}
+                <span>{L("Save & Push to GitHub", "حفظ ودفع إلى GitHub", lang)}</span>
               </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-4 py-2.5 rounded-lg border border-[var(--hub-border)] text-sm cursor-pointer"
+                >
+                  {L("New Blank", "مقال جديد", lang)}
+                </button>
+              )}
+            </div>
+            {editingId && (
+              <a
+                href={`#/journal/${encodeURIComponent(slug || editingId)}`}
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {L("View Live Article →", "عرض المقال ←", lang)}
+              </a>
             )}
           </div>
-          {editingId && (
-            <a
-              href={`#/journal/${encodeURIComponent(slug || editingId)}`}
-              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              {L("View Live Article →", "عرض المقال ←", lang)}
-            </a>
-          )}
+
+          {/* Direct GitHub Target & Session Token Bar */}
+          <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-3.5 space-y-2.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-[var(--hub-text-muted)]">
+                <span>
+                  {L("GitHub Target:", "مستودع النشر:", lang)}{" "}
+                  <strong className="text-[var(--hub-text)]">
+                    {syncTarget.owner}/{syncTarget.repo} ({syncTarget.branch})
+                  </strong>
+                </span>
+                {hasPendingArticlesDraft && (
+                  <span
+                    data-testid="articles-pending-sync-badge"
+                    className="text-amber-600 dark:text-amber-400 font-semibold"
+                  >
+                    · {L("Pending GitHub sync", "بانتظار الدفع إلى GitHub", lang)}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPatInput((v) => !v)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--hub-secondary)] hover:underline cursor-pointer"
+              >
+                <KeyRound className="w-3 h-3" />
+                <span>
+                  {githubToken.trim()
+                    ? L("Session Token Ready (Edit)", "رمز الجلسة جاهز (تعديل)", lang)
+                    : L("Set Session GitHub Token", "إدخال رمز GitHub للجلسة", lang)}
+                </span>
+              </button>
+            </div>
+
+            {(showPatInput || !githubToken.trim()) && (
+              <div>
+                <label htmlFor="article-editor-pat" className="text-[11px] font-semibold text-[var(--hub-text-muted)] block mb-1">
+                  {L("Session GitHub PAT (in-memory only, requires contents:write)", "رمز GitHub المؤقت (في الذاكرة فقط — contents:write)", lang)}
+                </label>
+                <input
+                  id="article-editor-pat"
+                  ref={patInputRef}
+                  data-testid="article-editor-pat-input"
+                  type="password"
+                  dir="ltr"
+                  autoComplete="off"
+                  value={githubToken}
+                  onChange={(e) => onChangeGithubToken(e.target.value)}
+                  placeholder="github_pat_... (contents:write)"
+                  className="w-full px-3 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+                />
+              </div>
+            )}
+
+            {pushStatus && (
+              <div
+                data-testid="article-github-push-status"
+                className={`rounded-lg border px-3 py-2 font-mono text-xs flex flex-wrap items-center justify-between gap-2 ${
+                  pushStatus.ok
+                    ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/5"
+                    : "border-red-500/40 text-red-700 dark:text-red-300 bg-red-500/5"
+                }`}
+              >
+                <span>{pushStatus.message}</span>
+                {pushStatus.htmlUrl && (
+                  <a
+                    href={pushStatus.htmlUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 underline font-semibold shrink-0"
+                  >
+                    <span>{L("View commit", "عرض في GitHub", lang)}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </form>
     </div>

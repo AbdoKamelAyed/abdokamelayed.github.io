@@ -13,7 +13,7 @@ export const ProjectCard: React.FC<{
   const cover = safeUrl(project.screenshots?.[0]);
 
   return (
-    <article className="rounded-2xl border border-[var(--hub-border)] hub-surface overflow-hidden flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5">
+    <article className="min-w-0 rounded-2xl border border-[var(--hub-border)] hub-surface overflow-hidden flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5">
       {cover ? (
         <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100 dark:bg-slate-900 border-b border-[var(--hub-border)]">
           <img
@@ -26,12 +26,12 @@ export const ProjectCard: React.FC<{
         </div>
       ) : null}
 
-      <div className="p-6 flex-1 flex flex-col justify-between gap-4">
-        <div className="space-y-2.5">
+      <div className="p-5 sm:p-6 min-w-0 flex-1 flex flex-col justify-between gap-4">
+        <div className="space-y-2.5 min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--hub-text-muted)]">
             <span className="font-semibold text-[var(--hub-secondary)]">{project.status}</span>
             <span aria-hidden="true">·</span>
-            <span>{project.category}</span>
+            <span className="break-words">{project.category}</span>
             {project.featured && (
               <>
                 <span aria-hidden="true">·</span>
@@ -40,20 +40,20 @@ export const ProjectCard: React.FC<{
             )}
           </div>
 
-          <h3 className="font-display text-lg font-semibold leading-snug">
+          <h3 className="font-display text-lg font-semibold leading-snug break-words [overflow-wrap:anywhere]">
             <a href={href} className="hover:underline">
               {loc(project.name, lang)}
             </a>
           </h3>
 
-          <p className="text-sm text-[var(--hub-text-muted)] line-clamp-3">
+          <p className="text-sm text-[var(--hub-text-muted)] line-clamp-3 break-words">
             {loc(project.shortDescription, lang)}
           </p>
         </div>
 
-        <div className="space-y-3 pt-3 border-t border-[var(--hub-border)]">
+        <div className="space-y-3 pt-3 border-t border-[var(--hub-border)] min-w-0">
           {project.techStack.length > 0 && (
-            <div className="text-xs text-[var(--hub-text-muted)] font-mono">
+            <div className="text-xs text-[var(--hub-text-muted)] font-mono break-words [overflow-wrap:anywhere]">
               {project.techStack.slice(0, 5).join(" · ")}
             </div>
           )}
@@ -88,7 +88,7 @@ export const ArticleCard: React.FC<{
   const readingMinutes = calculateReadingTimeMinutes(loc(article.content, lang));
 
   return (
-    <article className="rounded-2xl border border-[var(--hub-border)] hub-surface overflow-hidden flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5">
+    <article className="min-w-0 rounded-2xl border border-[var(--hub-border)] hub-surface overflow-hidden flex flex-col justify-between transition-transform duration-200 hover:-translate-y-0.5">
       {cover ? (
         <div className="aspect-[16/9] w-full overflow-hidden bg-slate-100 dark:bg-slate-900 border-b border-[var(--hub-border)]">
           <img
@@ -101,8 +101,8 @@ export const ArticleCard: React.FC<{
         </div>
       ) : null}
 
-      <div className="p-6 flex-1 flex flex-col justify-between gap-4">
-        <div className="space-y-2">
+      <div className="p-5 sm:p-6 min-w-0 flex-1 flex flex-col justify-between gap-4">
+        <div className="space-y-2 min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--hub-text-muted)]">
             <span className="font-semibold text-[var(--hub-secondary)]">{article.type}</span>
             <span aria-hidden="true">·</span>
@@ -113,19 +113,19 @@ export const ArticleCard: React.FC<{
             </span>
           </div>
 
-          <h3 className="font-display text-lg font-semibold leading-snug">
+          <h3 className="font-display text-lg font-semibold leading-snug break-words [overflow-wrap:anywhere]">
             <a href={href} className="hover:underline">
               {loc(article.title, lang)}
             </a>
           </h3>
 
-          <p className="text-sm text-[var(--hub-text-muted)] line-clamp-3">
+          <p className="text-sm text-[var(--hub-text-muted)] line-clamp-3 break-words">
             {loc(article.subtitle, lang)}
           </p>
         </div>
 
-        <div className="pt-3 border-t border-[var(--hub-border)] flex items-center justify-between gap-3">
-          <span className="text-xs text-[var(--hub-text-muted)] truncate">
+        <div className="pt-3 border-t border-[var(--hub-border)] flex items-center justify-between gap-3 min-w-0">
+          <span className="text-xs text-[var(--hub-text-muted)] truncate min-w-0 flex-1">
             {article.author ? `${article.author} · ` : ""}
             {article.tags.map((tg) => `#${tg}`).join(" · ")}
           </span>

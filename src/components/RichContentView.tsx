@@ -54,18 +54,22 @@ export const RichContentView: React.FC<{
   const assetMap = new Map(mediaAssets.map((a) => [a.id, a]));
 
   return (
-    <div className="space-y-5 text-base sm:text-lg leading-relaxed text-[var(--hub-text)]">
+    <div
+      data-testid="article-rich-content"
+      style={{ fontSize: "var(--hub-article-font-size, 16px)", lineHeight: 1.75 }}
+      className="space-y-5 text-[var(--hub-text)]"
+    >
       {blocks.map((block, idx) => {
         if (block.type === "h2") {
           return (
-            <h2 key={idx} id={block.id} className="scroll-mt-24 font-display text-2xl font-bold tracking-tight pt-3">
+            <h2 key={idx} id={block.id} className="scroll-mt-24 font-display text-[1.45em] font-bold tracking-tight pt-3 leading-snug">
               <InlineRuns text={block.text} />
             </h2>
           );
         }
         if (block.type === "h3") {
           return (
-            <h3 key={idx} id={block.id} className="scroll-mt-24 font-display text-xl font-semibold tracking-tight pt-2">
+            <h3 key={idx} id={block.id} className="scroll-mt-24 font-display text-[1.2em] font-semibold tracking-tight pt-2 leading-snug">
               <InlineRuns text={block.text} />
             </h3>
           );

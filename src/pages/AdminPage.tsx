@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { ArrowLeft, GitCommitHorizontal, Globe, Moon, ShieldAlert, Sun } from "lucide-react";
 import type {
   ExperienceItem,
   HubDatasets,
@@ -9,9 +9,14 @@ import type {
   ProjectStatus,
 } from "../types/hub";
 import {
+  hasLocalDraft,
   refreshPublicGithubLive,
+  removeLocalDraft,
   saveLocalDraft,
+  updateDatasetCache,
 } from "../services/dataService";
+import { syncLocalDraftsToGitHubRepo } from "../services/githubStorageService";
+import { googleDriveSignOut } from "../services/googleDriveService";
 import {
   appendAuditEntry,
   clearAdminSession,
@@ -21,18 +26,26 @@ import {
   type AdminAuditEntry,
   type AdminSessionRecord,
 } from "../utils/adminAuth";
+import {
+  canAccessAdminModule,
+  getAdminModuleLabel,
+  type AdminWorkspaceSection,
+} from "../utils/adminPermissions";
 import { slugify, validateCollectionSchema } from "../utils/analytics";
-import { formatDateTime, L, loc, t } from "../utils/i18n";
-import { AuthorAvatar } from "../components/AuthorProfileCard";
+import { formatDateTime, L, loc } from "../utils/i18n";
+import type { VisitInsightsStore } from "../utils/visitInsights";
+import { AdminAccessPanel } from "../components/admin/AdminAccessPanel";
 import { AdminLoginGate } from "../components/admin/AdminLoginGate";
 import { AdminOverview } from "../components/admin/AdminOverview";
+import { AdminSectionCharts } from "../components/admin/AdminSectionCharts";
+import { AdminVisitInsightsPanel } from "../components/admin/AdminVisitInsightsPanel";
+import { AdminWorkspaceShell } from "../components/admin/AdminWorkspaceShell";
 import { ArticleRichEditor } from "../components/admin/ArticleRichEditor";
 import { GitHubRepoStoragePanel } from "../components/admin/GitHubRepoStoragePanel";
 import { IssueBuilderPanel } from "../components/admin/IssueBuilderPanel";
 import { MediaLibraryPanel } from "../components/admin/MediaLibraryPanel";
 import { SiteSettingsPanel } from "../components/admin/SiteSettingsPanel";
-
-type AdminTab = "overview" | "editor" | "media" | "issues" | "projects" | "knowledge" | "github" | "settings";
+import { NetworkStatusToast } from "../components/NetworkStatusToast";
 
 const PROJECT_STATUSES: ProjectStatus[] = [
   "Planning",
@@ -57,12 +70,36 @@ function downloadJson(filename: string, data: unknown) {
 export const AdminPage: React.FC<{
   data: HubDatasets;
   lang: Lang;
+  theme: "light" | "dark";
+  activeSection?: AdminWorkspaceSection;
+  invalidSubSection?: string;
+  visitStore: VisitInsightsStore;
+  onResetVisits: () => void;
+  onNavigateSection?: (section: AdminWorkspaceSection) => void;
+  onToggleTheme: () => void;
+  onToggleLang: () => void;
   onUpdateData: (updater: (prev: HubDatasets) => HubDatasets) => void;
   onReloadFromSource: () => Promise<void>;
   onApplyWebsiteTheme: (website: HubDatasets["website"]) => void;
-}> = ({ data, lang, onUpdateData, onReloadFromSource, onApplyWebsiteTheme }) => {
+}> = ({
+  data,
+  lang,
+  theme,
+  activeSection = "overview",
+  invalidSubSection,
+  visitStore,
+  onResetVisits,
+  onNavigateSection,
+  onToggleTheme,
+  onToggleLang,
+  onUpdateData,
+  onReloadFromSource,
+  onApplyWebsiteTheme,
+}) => {
   const [session, setSession] = useState<AdminSessionRecord | null>(() => getActiveAdminSession());
-  const [tab, setTab] = useState<AdminTab>("overview");
+  const [localTab, setLocalTab] = useState<AdminWorkspaceSection>(activeSection);
+  const tab = onNavigateSection ? activeSection : localTab;
+
   const [statusBanner, setStatusBanner] = useState("");
   const [liveGhResult, setLiveGhResult] = useState("");
   const [auditLog, setAuditLog] = useState<AdminAuditEntry[]>(() => getAuditLog());
@@ -112,18 +149,81 @@ export const AdminPage: React.FC<{
     setAuditLog(next);
   };
 
+  const navigateSection = (nextSection: AdminWorkspaceSection) => {
+    const refreshed = touchAdminSession();
+    if (!refreshed) {
+      setSession(null);
+      return;
+    }
+    setSession(refreshed);
+    if (onNavigateSection) {
+      onNavigateSection(nextSection);
+    } else {
+      setLocalTab(nextSection);
+    }
+  };
+
   if (!session) {
     return (
-      <AdminLoginGate
-        lang={lang}
-        defaultUsername={data.profileSettings.githubUsername || "AbdoKamelAyed"}
-        defaultAvatarUrl={data.profileSettings.avatarUrl}
-        onAuthenticated={(newSession) => {
-          setSession(newSession);
-          const next = appendAuditEntry("Signed In", `Admin Portal (${newSession.role})`, newSession.username);
-          setAuditLog(next);
-        }}
-      />
+      <div className="min-h-screen flex flex-col hub-canvas text-[var(--hub-text)]">
+        <header className="border-b border-[var(--hub-border)] hub-surface px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <a
+            href="#/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--hub-text-muted)] hover:text-[var(--hub-text)]"
+          >
+            <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+            <span>{L("Back to Public Hub", "العودة إلى الموقع العام", lang)}</span>
+          </a>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              aria-label={L("Toggle light or dark mode", "تبديل المظهر", lang)}
+              className="h-9 px-3 rounded-lg border border-[var(--hub-border)] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              <span>{theme === "dark" ? L("Light", "فاتح", lang) : L("Dark", "داكن", lang)}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onToggleLang}
+              className="h-9 px-3 rounded-lg border border-[var(--hub-border)] text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>{lang === "ar" ? "EN" : "العربية"}</span>
+            </button>
+          </div>
+        </header>
+
+        <main id="main-content" className="flex-1 flex items-center justify-center p-4 sm:p-6">
+          <div className="w-full max-w-5xl">
+            <AdminLoginGate
+              lang={lang}
+              defaultUsername={data.profileSettings.githubUsername || "AbdoKamelAyed"}
+              defaultAvatarUrl={data.profileSettings.avatarUrl}
+              onAuthenticated={(newSession) => {
+                setStatusBanner("");
+                setLiveGhResult("");
+                setSession(newSession);
+                const next = appendAuditEntry(
+                  "Signed In",
+                  `Admin Workspace (${newSession.role})`,
+                  newSession.username
+                );
+                setAuditLog(next);
+                if (!canAccessAdminModule(newSession, tab)) {
+                  if (onNavigateSection) {
+                    onNavigateSection("overview");
+                  } else {
+                    setLocalTab("overview");
+                  }
+                }
+              }}
+            />
+          </div>
+        </main>
+        <NetworkStatusToast lang={lang} />
+      </div>
     );
   }
 
@@ -306,119 +406,137 @@ export const AdminPage: React.FC<{
     setStatusBanner(L("Experience entry saved to local draft.", "تم حفظ الخبرة في المسودة المحلية.", lang));
   };
 
+  const hasModuleAccess = canAccessAdminModule(session, tab);
+
   return (
-    <div className="space-y-8">
-      <header className="border-b border-[var(--hub-border)] pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <AuthorAvatar
-            src={session.avatarUrl || data.profileSettings.avatarUrl}
-            name={session.displayName || session.username}
-            sizeClass="w-12 h-12"
-          />
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400">
-              <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>
-                {session.displayName || session.username} ({session.role}) ·{" "}
-                {L("Session expires", "تنتهي الجلسة", lang)} {formatDateTime(session.expiresAt, lang)}
-              </span>
-            </div>
-            <h1 className="font-display text-3xl font-bold tracking-tight">{t("admin.title", lang)}</h1>
+    <AdminWorkspaceShell
+      data={data}
+      lang={lang}
+      theme={theme}
+      session={session}
+      activeSection={tab}
+      onSelectSection={navigateSection}
+      onToggleTheme={onToggleTheme}
+      onToggleLang={onToggleLang}
+      onSignOut={() => {
+        setGithubToken("");
+        setStatusBanner("");
+        setLiveGhResult("");
+        resetProjectForm();
+        googleDriveSignOut().catch(() => {});
+        clearAdminSession();
+        setSession(null);
+        if (onNavigateSection) {
+          onNavigateSection("overview");
+        } else {
+          setLocalTab("overview");
+        }
+      }}
+    >
+      <div className="space-y-6">
+        {invalidSubSection && (
+          <div className="rounded-xl border border-amber-500/40 hub-subtle px-4 py-3 text-xs font-mono text-amber-700 dark:text-amber-300">
+            {L(
+              `Unknown admin route "${invalidSubSection}" — showing Command Dashboard.`,
+              `مسار الإدارة "${invalidSubSection}" غير معروف — تم عرض لوحة التحكم.`,
+              lang
+            )}
           </div>
-        </div>
+        )}
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setGithubToken("");
-              clearAdminSession();
-              setSession(null);
-            }}
-            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+        {statusBanner && (
+          <div className="rounded-xl border border-blue-600/40 hub-subtle px-4 py-3 text-sm flex items-center justify-between gap-4">
+            <span className="break-words min-w-0">{statusBanner}</span>
+            <button type="button" onClick={() => setStatusBanner("")} className="text-xs underline cursor-pointer shrink-0">
+              {L("Dismiss", "إخفاء", lang)}
+            </button>
+          </div>
+        )}
+
+        {!hasModuleAccess ? (
+          <section
+            data-testid="admin-access-restricted"
+            className="rounded-2xl border border-red-500/40 hub-surface p-8 max-w-xl space-y-4"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>{L("Lock & Sign Out", "قفل وتسجيل الخروج", lang)}</span>
-          </button>
-        </div>
-      </header>
+            <div className="inline-flex items-center gap-2 text-red-600 dark:text-red-400 font-semibold text-sm">
+              <ShieldAlert className="w-5 h-5" />
+              <span>{L("Administrator Access Restricted", "الوصول مقيد حسب الصلاحية", lang)}</span>
+            </div>
+            <h2 className="font-display text-2xl font-bold">
+              {getAdminModuleLabel(tab, lang)}
+            </h2>
+            <p className="text-sm text-[var(--hub-text-muted)] leading-relaxed">
+              {L(
+                `Your current role (${session.role}) does not include permission to open this workspace module. Request elevated module access from an Owner administrator.`,
+                `دورك الحالي (${session.role}) لا يتضمن صلاحية الوصول إلى هذا القسم. اطلب من مالك النظام تفعيل الصلاحية.`,
+                lang
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigateSection("overview")}
+              className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)] cursor-pointer"
+            >
+              {L("Return to Command Dashboard", "العودة إلى لوحة التحكم", lang)}
+            </button>
+          </section>
+        ) : (
+          <>
+            {tab !== "overview" && tab !== "visits" && (
+              <AdminSectionCharts
+                section={tab}
+                data={data}
+                lang={lang}
+                auditLog={auditLog}
+              />
+            )}
 
-      <div className="flex flex-wrap gap-2 border-b border-[var(--hub-border)] pb-3">
-        {(
-          [
-            ["overview", L("Command Dashboard", "لوحة التحكم", lang)],
-            ["editor", L("Rich Article Editor", "المحرر المتقدم", lang)],
-            ["media", L("Media Library", "مكتبة الوسائط", lang)],
-            ["issues", L("Issues & PDF Maker", "الأعداد وصانع PDF", lang)],
-            ["projects", L("Projects", "المشاريع", lang)],
-            ["knowledge", L("Knowledge & Work", "المعرفة والخبرات", lang)],
-            ["github", L("GitHub Sync", "مزامنة GitHub", lang)],
-            ["settings", L("SEO & Site Settings", "SEO والإعدادات", lang)],
-          ] as [AdminTab, string][]
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => {
-              const refreshed = touchAdminSession();
-              if (!refreshed) {
-                setSession(null);
-                return;
-              }
-              setSession(refreshed);
-              setTab(id);
-            }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer whitespace-nowrap ${
-              tab === id
-                ? "bg-[var(--hub-primary)] text-[var(--hub-bg)]"
-                : "border border-[var(--hub-border)] text-[var(--hub-text-muted)] hover:text-[var(--hub-text)]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+            {tab === "overview" && (
+              <AdminOverview
+                data={data}
+                lang={lang}
+                auditLog={auditLog}
+                session={session}
+                visitStore={visitStore}
+                onNavigateTab={navigateSection}
+                onReloadFromSource={onReloadFromSource}
+                onNotify={setStatusBanner}
+                onExportBundle={() => {
+                  downloadJson(`abdo-hub-backup-${nowIso().slice(0, 10)}.json`, {
+                    exportedAt: nowIso(),
+                    website: data.website,
+                    profileSettings: data.profileSettings,
+                    githubSyncSettings: data.githubSyncSettings,
+                    projects: data.projects,
+                    articles: data.allArticlesRaw,
+                    issues: data.allIssuesRaw,
+                    mediaAssets: data.mediaAssets,
+                    knowledge: data.allKnowledgeRaw,
+                    experience: data.experience,
+                  });
+                  recordAudit("Exported Full Backup", "All Datasets");
+                }}
+              />
+            )}
 
-      {statusBanner && (
-        <div className="rounded-xl border border-blue-600/40 hub-subtle px-4 py-3 text-sm flex items-center justify-between gap-4">
-          <span>{statusBanner}</span>
-          <button type="button" onClick={() => setStatusBanner("")} className="text-xs underline cursor-pointer">
-            {L("Dismiss", "إخفاء", lang)}
-          </button>
-        </div>
-      )}
-
-      {tab === "overview" && (
-        <AdminOverview
-          data={data}
-          lang={lang}
-          auditLog={auditLog}
-          onNavigateTab={(tId) => setTab(tId)}
-          onReloadFromSource={onReloadFromSource}
-          onNotify={setStatusBanner}
-          onExportBundle={() => {
-            downloadJson(`abdo-hub-backup-${nowIso().slice(0, 10)}.json`, {
-              exportedAt: nowIso(),
-              website: data.website,
-              profileSettings: data.profileSettings,
-              githubSyncSettings: data.githubSyncSettings,
-              projects: data.projects,
-              articles: data.allArticlesRaw,
-              issues: data.allIssuesRaw,
-              mediaAssets: data.mediaAssets,
-              knowledge: data.allKnowledgeRaw,
-              experience: data.experience,
-            });
-            recordAudit("Exported Full Backup", "All Datasets");
-          }}
-        />
-      )}
+            {tab === "visits" && (
+              <AdminVisitInsightsPanel
+                data={data}
+                lang={lang}
+                visitStore={visitStore}
+                onResetVisits={onResetVisits}
+                onAudit={recordAudit}
+                onNotify={setStatusBanner}
+              />
+            )}
 
       {tab === "editor" && (
         <ArticleRichEditor
           data={data}
           lang={lang}
           adminUsername={session.username}
+          githubToken={githubToken}
+          onChangeGithubToken={setGithubToken}
           onUpdateData={onUpdateData}
           onNotify={setStatusBanner}
           onAudit={recordAudit}
@@ -584,7 +702,82 @@ export const AdminPage: React.FC<{
               >
                 {L("Export projects.json", "تصدير projects.json", lang)}
               </button>
+              <button
+                type="button"
+                data-testid="sync-projects-github-btn"
+                onClick={async () => {
+                  const owner =
+                    data.githubSyncSettings.storageOwner ||
+                    data.githubSyncSettings.username ||
+                    data.profileSettings.githubUsername ||
+                    "AbdoKamelAyed";
+                  const repo = data.githubSyncSettings.storageRepo || `${owner}.github.io`;
+                  const branch = data.githubSyncSettings.storageBranch || "main";
+                  if (!githubToken.trim()) {
+                    navigateSection("github");
+                    setStatusBanner(
+                      L(
+                        `Enter your session GitHub PAT below to commit local project updates to ${owner}/${repo}.`,
+                        `أدخل رمز GitHub المؤقت للجلسة لدفع تحديثات المشاريع إلى ${owner}/${repo}.`,
+                        lang
+                      )
+                    );
+                    return;
+                  }
+                  const payload = {
+                    id: "projects-collection",
+                    items: data.projects,
+                    createdAt: "2026-11-25T00:00:00Z",
+                    updatedAt: nowIso(),
+                    status: "active",
+                    source: "manual-portfolio",
+                  };
+                  setStatusBanner(L(`Syncing projects.json to ${owner}/${repo}...`, "جارٍ مزامنة المشاريع مع GitHub...", lang));
+                  const res = await syncLocalDraftsToGitHubRepo({
+                    token: githubToken.trim(),
+                    owner,
+                    repo,
+                    branch,
+                    drafts: [
+                      {
+                        datasetPath: "./data/projects/projects.json",
+                        repoPath: "public/data/projects/projects.json",
+                        payload,
+                      },
+                    ],
+                    commitMessagePrefix: "Update projects.json",
+                    allowOverwrite: true,
+                  });
+                  if (res.synced.length > 0) {
+                    updateDatasetCache("./data/projects/projects.json", payload);
+                    removeLocalDraft("./data/projects/projects.json");
+                    recordAudit("Synced Projects to GitHub", `${owner}/${repo}`);
+                    setStatusBanner(
+                      L(
+                        `Synced projects.json directly to ${owner}/${repo} (${branch}).`,
+                        `تمت مزامنة المشاريع بنجاح مع ${owner}/${repo}.`,
+                        lang
+                      )
+                    );
+                  } else {
+                    setStatusBanner(res.failed[0]?.error || "Failed to sync projects to GitHub.");
+                  }
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-secondary)] text-white inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <GitCommitHorizontal className="w-4 h-4" />
+                <span>{L("Sync Projects to GitHub", "مزامنة المشاريع مع GitHub", lang)}</span>
+              </button>
             </div>
+            {hasLocalDraft("./data/projects/projects.json") && (
+              <p data-testid="projects-pending-sync-badge" className="text-xs font-mono text-amber-600 dark:text-amber-400">
+                {L(
+                  "Local project updates pending GitHub repository sync.",
+                  "توجد تعديلات محلية للمشاريع بانتظار المزامنة مع GitHub.",
+                  lang
+                )}
+              </p>
+            )}
           </form>
 
           <div className="lg:col-span-6 rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
@@ -753,7 +946,18 @@ export const AdminPage: React.FC<{
 
       {tab === "github" && (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-5 max-w-3xl">
+          <GitHubRepoStoragePanel
+            data={data}
+            lang={lang}
+            githubToken={githubToken}
+            onChangeGithubToken={setGithubToken}
+            onUpdateData={onUpdateData}
+            onReloadFromSource={onReloadFromSource}
+            onNotify={setStatusBanner}
+            onAudit={recordAudit}
+          />
+
+          <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-5">
             <h2 className="font-display text-xl font-semibold">{L("GitHub Synchronization & Exclusions", "إدارة مزامنة GitHub", lang)}</h2>
             <div className="text-sm text-[var(--hub-text-muted)] space-y-1 font-mono">
               <div>Status: {data.github.syncMeta.syncStatus}</div>
@@ -837,16 +1041,6 @@ export const AdminPage: React.FC<{
               </div>
             </form>
           </div>
-
-          <GitHubRepoStoragePanel
-            data={data}
-            lang={lang}
-            githubToken={githubToken}
-            onChangeGithubToken={setGithubToken}
-            onUpdateData={onUpdateData}
-            onNotify={setStatusBanner}
-            onAudit={recordAudit}
-          />
         </div>
       )}
 
@@ -862,6 +1056,24 @@ export const AdminPage: React.FC<{
           onDownloadJson={downloadJson}
         />
       )}
-    </div>
+
+      {tab === "access" && (
+        <AdminAccessPanel
+          lang={lang}
+          session={session}
+          defaultAvatarUrl={data.profileSettings.avatarUrl}
+          auditLog={auditLog}
+          onRefreshSession={() => {
+            const refreshed = getActiveAdminSession();
+            if (refreshed) setSession(refreshed);
+          }}
+          onNotify={setStatusBanner}
+          onAudit={recordAudit}
+        />
+      )}
+          </>
+        )}
+      </div>
+    </AdminWorkspaceShell>
   );
 };

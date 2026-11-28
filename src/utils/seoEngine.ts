@@ -1,6 +1,7 @@
 import type { HubDatasets, Lang } from "../types/hub";
 import { loc } from "./i18n";
 import { safeUrl } from "./analytics";
+import { resolveLinkPreviewImage } from "./socialShare";
 
 export interface SeoAuditItem {
   id: string;
@@ -117,6 +118,7 @@ export function generateSitemapXml(data: HubDatasets): string {
   const base = (data.website.domain || "https://abdokamelayed.github.io").replace(/\/+$/, "");
   const urls: { locUrl: string; lastmod: string; priority: string }[] = [
     { locUrl: `${base}/`, lastmod: data.website.updatedAt || new Date().toISOString().slice(0, 10), priority: "1.0" },
+    { locUrl: `${base}/#/now`, lastmod: data.website.updatedAt || new Date().toISOString().slice(0, 10), priority: "0.9" },
     { locUrl: `${base}/#/projects`, lastmod: data.website.updatedAt || new Date().toISOString().slice(0, 10), priority: "0.9" },
     { locUrl: `${base}/#/journal`, lastmod: data.website.updatedAt || new Date().toISOString().slice(0, 10), priority: "0.9" },
     { locUrl: `${base}/#/knowledge`, lastmod: data.website.updatedAt || new Date().toISOString().slice(0, 10), priority: "0.8" },
@@ -165,12 +167,16 @@ export function generateRobotsTxt(domain: string): string {
 
 export function buildStructuredDataJsonLd(
   data: HubDatasets,
-  route: { section: string; param: string | null; subParam?: string | null },
+  route: { section: string; param?: string | null; subParam?: string | null },
   lang: Lang
 ): Record<string, unknown> {
   const base = (data.website.domain || "https://abdokamelayed.github.io").replace(/\/+$/, "");
   const personName = loc(data.profileSettings.fullName, lang) || "Abdo Kamel";
-  const avatar = safeUrl(data.profileSettings.avatarUrl || data.website.ogImage);
+  const defaultPreview = resolveLinkPreviewImage(
+    data.website.ogImage,
+    data.profileSettings.avatarUrl,
+    base
+  ).absoluteUrl;
 
   if (route.section === "journal" && route.param === "issues" && route.subParam) {
     const issue = data.issues.find(
@@ -184,7 +190,7 @@ export function buildStructuredDataJsonLd(
         issueNumber: issue.issueNumber,
         datePublished: issue.publishedAt,
         description: loc(issue.subtitle, lang),
-        image: safeUrl(issue.coverImage) || avatar || undefined,
+        image: resolveLinkPreviewImage(issue.coverImage, data.website.ogImage, base).absoluteUrl,
         url: `${base}/#/journal/issues/${encodeURIComponent(issue.slug)}`,
       };
     }
@@ -202,12 +208,12 @@ export function buildStructuredDataJsonLd(
         description: art.seo?.description || loc(art.subtitle, lang),
         datePublished: art.publishedAt,
         dateModified: art.updatedAt,
-        image: safeUrl(art.coverImage) || avatar || undefined,
+        image: resolveLinkPreviewImage(art.coverImage, data.website.ogImage, base).absoluteUrl,
         keywords: art.tags.join(", "),
         author: {
           "@type": "Person",
           name: art.author || personName,
-          image: safeUrl(art.authorAvatar) || avatar || undefined,
+          image: resolveLinkPreviewImage(art.authorAvatar, data.profileSettings.avatarUrl, base).absoluteUrl,
         },
         url: `${base}/#/journal/${encodeURIComponent(art.slug)}`,
       };
@@ -236,7 +242,7 @@ export function buildStructuredDataJsonLd(
     name: personName,
     alternateName: data.profileSettings.githubUsername || "AbdoKamelAyed",
     description: loc(data.website.seoDescription, lang),
-    image: avatar || undefined,
+    image: defaultPreview,
     url: `${base}/`,
     sameAs: [
       data.profileSettings.contact.github,
@@ -248,7 +254,7 @@ export function buildStructuredDataJsonLd(
 
 export function applyPageSeoMetadata(
   data: HubDatasets,
-  route: { section: string; param: string | null; subParam?: string | null },
+  route: { section: string; param?: string | null; subParam?: string | null },
   lang: Lang
 ): void {
   if (typeof document === "undefined") return;
@@ -257,7 +263,7 @@ export function applyPageSeoMetadata(
   let pageTitle = baseTitle;
   let description = loc(data.website.seoDescription, lang);
   let ogType = "website";
-  let ogImage = safeUrl(data.website.ogImage || data.profileSettings.avatarUrl);
+  let rawImageCandidate: string | undefined = data.website.ogImage || data.profileSettings.avatarUrl;
   let canonical = `${baseDomain}/`;
 
   if (route.section === "projects" && route.param) {
@@ -266,7 +272,7 @@ export function applyPageSeoMetadata(
       pageTitle = `${loc(p.name, lang)} — ${baseTitle}`;
       description = loc(p.shortDescription, lang) || description;
       canonical = `${baseDomain}/#/projects/${encodeURIComponent(p.slug || p.id)}`;
-      ogImage = safeUrl(p.screenshots?.[0]) || ogImage;
+      if (p.screenshots?.[0]) rawImageCandidate = p.screenshots[0];
     }
   } else if (route.section === "journal" && route.param === "issues" && route.subParam) {
     const issue = data.issues.find(
@@ -276,7 +282,7 @@ export function applyPageSeoMetadata(
       pageTitle = `${loc(issue.title, lang)} — ${baseTitle}`;
       description = loc(issue.subtitle, lang) || description;
       ogType = "article";
-      ogImage = safeUrl(issue.coverImage) || ogImage;
+      if (issue.coverImage) rawImageCandidate = issue.coverImage;
       canonical = `${baseDomain}/#/journal/issues/${encodeURIComponent(issue.slug || issue.id)}`;
     }
   } else if (route.section === "journal" && route.param) {
@@ -285,13 +291,35 @@ export function applyPageSeoMetadata(
       pageTitle = `${loc(a.title, lang)} — ${baseTitle}`;
       description = a.seo?.description || loc(a.subtitle, lang) || description;
       ogType = "article";
-      ogImage = safeUrl(a.coverImage) || ogImage;
+      if (a.coverImage) rawImageCandidate = a.coverImage;
       canonical = `${baseDomain}/#/journal/${encodeURIComponent(a.slug || a.id)}`;
     }
+  } else if (route.section === "now") {
+    pageTitle = `${lang === "ar" ? "ما أعمل عليه الآن" : "What I'm Working On Now"} — ${baseTitle}`;
+    description =
+      lang === "ar"
+        ? "المشاريع النشطة، الأعمال الحالية، وتطورات المستودعات البرمجية لعبدو كامل."
+        : "Active software builds, current engineering focus, and live repository momentum of Abdo Kamel.";
+    canonical = `${baseDomain}/#/now`;
+  } else if (route.section === "admin") {
+    const sub = route.param && route.param !== "overview" ? `/${route.param}` : "";
+    pageTitle = sub
+      ? `${route.param!.toUpperCase()} — Admin Workspace — ${baseTitle}`
+      : `Admin Workspace — ${baseTitle}`;
+    canonical = `${baseDomain}/#/admin${sub}`;
+  } else if (route.section === "not-found") {
+    pageTitle = `Page Not Found — ${baseTitle}`;
+    canonical = `${baseDomain}/`;
   } else if (route.section !== "home") {
     pageTitle = `${route.section.toUpperCase()} — ${baseTitle}`;
     canonical = `${baseDomain}/#/${route.section}`;
   }
+
+  const ogImage = resolveLinkPreviewImage(
+    rawImageCandidate,
+    data.website.ogImage || data.profileSettings.avatarUrl,
+    baseDomain
+  ).absoluteUrl;
 
   document.title = pageTitle;
 
@@ -312,6 +340,8 @@ export function applyPageSeoMetadata(
   upsertMeta("property", "og:description", description);
   upsertMeta("property", "og:url", canonical);
   upsertMeta("property", "og:image", ogImage);
+  upsertMeta("property", "og:image:alt", pageTitle);
+  upsertMeta("name", "twitter:card", "summary_large_image");
   upsertMeta("name", "twitter:title", pageTitle);
   upsertMeta("name", "twitter:description", description);
   upsertMeta("name", "twitter:image", ogImage);

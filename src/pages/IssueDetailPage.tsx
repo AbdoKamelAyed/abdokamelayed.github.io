@@ -5,15 +5,21 @@ import { calculateReadingTimeMinutes, safeMediaUrl, safeUrl } from "../utils/ana
 import { formatDate, L, loc, t } from "../utils/i18n";
 import { calculateIssueStats, formatCadenceLabel, resolveIssueArticles } from "../utils/issues";
 import { buildIssuePdfInput, generatePdfBytes, triggerPdfDownload } from "../utils/pdfMaker";
+import type { FontScale } from "../utils/typography";
+import { ArticleFontSizeControls } from "../components/ArticleFontSizeControls";
 import { AuthorAvatar, AuthorProfileCard } from "../components/AuthorProfileCard";
 import { ReadingProgressBar } from "../components/ReadingProgressBar";
 import { RichContentView } from "../components/RichContentView";
+import { SocialSharePanel } from "../components/SocialSharePanel";
 
 export const IssueDetailPage: React.FC<{
   data: HubDatasets;
   slugOrId: string;
   lang: Lang;
-}> = ({ data, slugOrId, lang }) => {
+  fontScale: FontScale;
+  onStepFontScale: (delta: -1 | 1) => void;
+  onSelectFontScale: (scale: FontScale) => void;
+}> = ({ data, slugOrId, lang, fontScale, onStepFontScale, onSelectFontScale }) => {
   const target = decodeURIComponent(slugOrId);
   const issue = data.issues.find((i) => i.slug === target || i.id === target);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
@@ -99,6 +105,12 @@ export const IssueDetailPage: React.FC<{
         </a>
 
         <div className="flex flex-wrap items-center gap-2">
+          <ArticleFontSizeControls
+            fontScale={fontScale}
+            lang={lang}
+            onStepFontScale={onStepFontScale}
+            onSelectFontScale={onSelectFontScale}
+          />
           <button
             type="button"
             onClick={handleDownloadPdf}
@@ -313,6 +325,20 @@ export const IssueDetailPage: React.FC<{
             </article>
           );
         })}
+      </div>
+
+      <div className="max-w-3xl mx-auto">
+        <SocialSharePanel
+          lang={lang}
+          domain={data.website.domain}
+          hashPath={`#/journal/issues/${encodeURIComponent(issue.slug || issue.id)}`}
+          title={`${issue.issueNumber} — ${loc(issue.title, lang)}`}
+          summary={loc(issue.subtitle, lang)}
+          previewImageCandidate={issue.coverImage}
+          fallbackPreviewImage={data.website.ogImage || data.profileSettings.avatarUrl}
+          tags={issue.topics}
+          siteName={data.website.siteName}
+        />
       </div>
 
       {/* Author Profile Footer */}

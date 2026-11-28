@@ -31,6 +31,11 @@
 }
 
 @layer base {
+  html, body {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+
   html {
     scroll-behavior: smooth;
     background-color: var(--hub-bg);
@@ -150,6 +155,94 @@ header a.rounded-lg {
   }
 }
 
+.gsi-material-button {
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  appearance: none;
+  background-color: #ffffff;
+  background-image: none;
+  border: 1px solid #747775;
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: #1f1f1f;
+  cursor: pointer;
+  font-family: "Roboto", var(--font-body), sans-serif;
+  font-size: 14px;
+  height: 40px;
+  letter-spacing: 0.25px;
+  outline: none;
+  overflow: hidden;
+  padding: 0 12px;
+  position: relative;
+  text-align: center;
+  transition: background-color 0.218s, border-color 0.218s, box-shadow 0.218s;
+  vertical-align: middle;
+  white-space: nowrap;
+  width: auto;
+  max-width: 400px;
+  min-width: min-content;
+}
+
+.dark .gsi-material-button {
+  background-color: #131314;
+  border-color: #8e918f;
+  color: #e3e3e3;
+}
+
+.gsi-material-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.gsi-material-button:not(:disabled):hover {
+  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+}
+
+.gsi-material-button-content-wrapper {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  height: 100%;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+}
+
+.gsi-material-button-icon {
+  height: 20px;
+  margin-inline-end: 10px;
+  min-width: 20px;
+  width: 20px;
+}
+
+.gsi-material-button-contents {
+  flex-grow: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.gsi-material-button-state {
+  transition: opacity 0.218s;
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+}
+
+.gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+  background-color: #303030;
+  opacity: 0.08;
+}
+
+.dark .gsi-material-button:not(:disabled):hover .gsi-material-button-state {
+  background-color: #ffffff;
+  opacity: 0.08;
+}
+
 @media print {
   @page {
     margin: 18mm 16mm;
@@ -189,6 +282,7 @@ header a.rounded-lg {
   [data-testid="print-article-btn"],
   [data-testid="article-lightbox"],
   [data-testid="article-toc"],
+  [data-testid="network-status-banner"],
   [role="progressbar"],
   #main-content > div > div:has(> a[href="#/journal"]),
   section[aria-labelledby="related-reading-heading"] {
@@ -354,6 +448,40 @@ header a.rounded-lg {
     page-break-before: always;
     border-top: none !important;
     padding-top: 0 !important;
+  }
+
+  .print-cover-page {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    min-height: 235mm !important;
+    padding: 18mm 0 12mm !important;
+    margin-bottom: 12mm !important;
+    break-after: page !important;
+    page-break-after: always !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-cover-title {
+    font-size: 28pt !important;
+    line-height: 1.15 !important;
+    color: #000000 !important;
+    margin: 0 !important;
+  }
+
+  .print-cover-subtitle {
+    font-size: 13pt !important;
+    line-height: 1.5 !important;
+    color: #334155 !important;
+  }
+
+  .knowledge-page[data-printing-entry="true"] .knowledge-screen-archive {
+    display: none !important;
+  }
+
+  .knowledge-page:not([data-printing-entry="true"]) .knowledge-single-print {
+    display: none !important;
   }
 
   .print\:hidden,

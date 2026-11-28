@@ -1,27 +1,38 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   Check,
+  CloudDownload,
   ExternalLink,
   FolderGit2,
   FolderSearch,
+  GitCommitHorizontal,
   KeyRound,
   RefreshCw,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import type { HubDatasets, Lang } from "../../types/hub";
-import { saveLocalDraft } from "../../services/dataService";
+import {
+  listLocalDrafts,
+  removeLocalDraft,
+  saveLocalDraft,
+  updateDatasetCache,
+} from "../../services/dataService";
 import {
   arrayBufferToBase64,
   deleteFileFromGitHubRepo,
+  fetchJsonFromGitHubRepo,
   listGitHubRepoFiles,
+  syncLocalDraftsToGitHubRepo,
   uploadFileToGitHubRepo,
   utf8ToBase64,
   type GitHubStoredFileEntry,
+  type LocalSyncFileOutcome,
 } from "../../services/githubStorageService";
 import { detectMediaTypeFromFile } from "../../services/mediaLibraryService";
 import { formatBytesCompact, slugify } from "../../utils/analytics";
 import { L } from "../../utils/i18n";
+import { LoadingSpinner } from "../LoadingSpinner";
 
 type DatasetPushTarget = {
   id: string;
@@ -117,6 +128,7 @@ export const GitHubRepoStoragePanel: React.FC<{
   githubToken: string;
   onChangeGithubToken: (token: string) => void;
   onUpdateData: (updater: (prev: HubDatasets) => HubDatasets) => void;
+  onReloadFromSource?: () => Promise<void>;
   onNotify: (msg: string) => void;
   onAudit: (action: string, target: string) => void;
 }> = ({
@@ -125,6 +137,7 @@ export const GitHubRepoStoragePanel: React.FC<{
   githubToken,
   onChangeGithubToken,
   onUpdateData,
+  onReloadFromSource,
   onNotify,
   onAudit,
 }) => {
@@ -140,12 +153,38 @@ export const GitHubRepoStoragePanel: React.FC<{
   const [allowOverwrite, setAllowOverwrite] = useState(true);
   const [busy, setBusy] = useState(false);
   const [opStatus, setOpStatus] = useState("");
+  const [opIsError, setOpIsError] = useState(false);
   const [entries, setEntries] = useState<GitHubStoredFileEntry[]>([]);
   const [hasLoadedEntries, setHasLoadedEntries] = useState(false);
   const [deleteConfirmPath, setDeleteConfirmPath] = useState<string | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState("website");
 
+  // Pending local drafts sync state
+  const [draftVersion, setDraftVersion] = useState(0);
+  const pendingDrafts = useMemo(() => {
+    void draftVersion;
+    void data;
+    return listLocalDrafts();
+  }, [draftVersion, data]);
+  const [deselectedPaths, setDeselectedPaths] = useState<string[]>([]);
+  const [syncCommitMsg, setSyncCommitMsg] = useState("Sync local hub updates");
+  const [clearDraftsOnSync, setClearDraftsOnSync] = useState(true);
+  const [confirmSyncPending, setConfirmSyncPending] = useState(false);
+  const [lastSyncOutcomes, setLastSyncOutcomes] = useState<LocalSyncFileOutcome[]>([]);
+
+  const selectedDrafts = useMemo(
+    () => pendingDrafts.filter((d) => !deselectedPaths.includes(d.datasetPath)),
+    [pendingDrafts, deselectedPaths]
+  );
+
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const patInputRef = useRef<HTMLInputElement | null>(null);
+
+  const promptForPat = (message: string) => {
+    setOpIsError(true);
+    setOpStatus(message);
+    window.requestAnimationFrame(() => patInputRef.current?.focus());
+  };
 
   const handleSaveStorageTarget = (e: React.FormEvent) => {
     e.preventDefault();
@@ -166,7 +205,7 @@ export const GitHubRepoStoragePanel: React.FC<{
 
   const handleBrowseFolder = async () => {
     if (!githubToken.trim()) {
-      setOpStatus(
+      promptForPat(
         L(
           "Enter a session GitHub PAT first to browse repository storage.",
           "أدخل رمز GitHub المؤقت أولاً لاستعراض مجلد المستودع.",
@@ -176,6 +215,7 @@ export const GitHubRepoStoragePanel: React.FC<{
       return;
     }
     setBusy(true);
+    setOpIsError(false);
     setDeleteConfirmPath(null);
     setOpStatus(L("Fetching repository folder contents...", "جارٍ جلب محتويات المجلد...", lang));
     try {
@@ -194,6 +234,7 @@ export const GitHubRepoStoragePanel: React.FC<{
           : L(`Loaded ${list.length} entries from ${storageFolder}.`, `تم تحميل ${list.length} عنصر من المجلد.`, lang)
       );
     } catch (err) {
+      setOpIsError(true);
       setOpStatus(err instanceof Error ? err.message : "Failed to list repository folder.");
     } finally {
       setBusy(false);
@@ -203,7 +244,7 @@ export const GitHubRepoStoragePanel: React.FC<{
   const handleUploadFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     if (!githubToken.trim()) {
-      setOpStatus(
+      promptForPat(
         L(
           "Session GitHub PAT is required to upload files.",
           "يتطلب الرفع إدخال رمز GitHub المؤقت للجلسة.",
@@ -213,6 +254,7 @@ export const GitHubRepoStoragePanel: React.FC<{
       return;
     }
     setBusy(true);
+    setOpIsError(false);
     setOpStatus(L("Pushing file(s) to GitHub repository...", "جارٍ رفع الملفات إلى مستودع GitHub...", lang));
     try {
       const uploadedNames: string[] = [];
@@ -281,13 +323,14 @@ export const GitHubRepoStoragePanel: React.FC<{
 
   const handlePushDataset = async () => {
     if (!githubToken.trim()) {
-      setOpStatus(L("Enter a session GitHub PAT before pushing datasets.", "أدخل رمز GitHub أولاً لرفع البيانات.", lang));
+      promptForPat(L("Enter a session GitHub PAT before pushing datasets.", "أدخل رمز GitHub أولاً لرفع البيانات.", lang));
       return;
     }
     const target = DATASET_TARGETS.find((t) => t.id === selectedDatasetId);
     if (!target) return;
 
     setBusy(true);
+    setOpIsError(false);
     setOpStatus(L(`Publishing ${target.label} to GitHub...`, `جارٍ نشر ${target.label} إلى GitHub...`, lang));
     try {
       const jsonText = `${JSON.stringify(target.buildPayload(data), null, 2)}\n`;
@@ -307,6 +350,7 @@ export const GitHubRepoStoragePanel: React.FC<{
       setOpStatus(msg);
       onNotify(msg);
     } catch (err) {
+      setOpIsError(true);
       setOpStatus(err instanceof Error ? err.message : "Dataset push failed.");
     } finally {
       setBusy(false);
@@ -316,6 +360,7 @@ export const GitHubRepoStoragePanel: React.FC<{
   const handleConfirmDelete = async (entry: GitHubStoredFileEntry) => {
     if (!githubToken.trim()) return;
     setBusy(true);
+    setOpIsError(false);
     try {
       await deleteFileFromGitHubRepo({
         token: githubToken.trim(),
@@ -330,7 +375,158 @@ export const GitHubRepoStoragePanel: React.FC<{
       setOpStatus(L(`Removed ${entry.path} from repository.`, `تم حذف ${entry.path} من المستودع.`, lang));
       setEntries((prev) => prev.filter((x) => x.path !== entry.path));
     } catch (err) {
+      setOpIsError(true);
       setOpStatus(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleDraftSelection = (datasetPath: string) => {
+    setDeselectedPaths((prev) =>
+      prev.includes(datasetPath) ? prev.filter((p) => p !== datasetPath) : [...prev, datasetPath]
+    );
+  };
+
+  const handleSyncSelectedDrafts = async () => {
+    if (!githubToken.trim()) {
+      promptForPat(
+        L(
+          "Enter a session GitHub PAT (contents:write) first to sync local changes to GitHub.",
+          "أدخل رمز GitHub المؤقت للجلسة (contents:write) أولاً لمزامنة التعديلات.",
+          lang
+        )
+      );
+      return;
+    }
+    if (selectedDrafts.length === 0) return;
+    setConfirmSyncPending(false);
+    setBusy(true);
+    setOpIsError(false);
+    setLastSyncOutcomes([]);
+    setOpStatus(
+      L(
+        `Syncing ${selectedDrafts.length} local dataset(s) to ${storageOwner}/${storageRepo}...`,
+        `جارٍ مزامنة ${selectedDrafts.length} ملف(ات) مع ${storageOwner}/${storageRepo}...`,
+        lang
+      )
+    );
+    try {
+      const { synced, failed } = await syncLocalDraftsToGitHubRepo({
+        token: githubToken.trim(),
+        owner: storageOwner,
+        repo: storageRepo,
+        branch: storageBranch,
+        drafts: selectedDrafts.map((d) => ({
+          datasetPath: d.datasetPath,
+          repoPath: d.repoPath,
+          payload: d.payload,
+        })),
+        commitMessagePrefix: syncCommitMsg,
+        allowOverwrite: true,
+      });
+
+      setLastSyncOutcomes([...synced, ...failed]);
+
+      if (clearDraftsOnSync) {
+        for (const item of synced) {
+          const matching = selectedDrafts.find((d) => d.datasetPath === item.datasetPath);
+          if (matching) {
+            updateDatasetCache(matching.datasetPath, matching.payload);
+            removeLocalDraft(matching.datasetPath);
+          }
+        }
+        setDraftVersion((v) => v + 1);
+      }
+
+      if (synced.length > 0) {
+        onAudit(
+          "Synced Local Changes to GitHub",
+          synced.map((s) => s.repoPath).join(", ")
+        );
+      }
+
+      setOpIsError(failed.length > 0 && synced.length === 0);
+      const summary =
+        failed.length === 0
+          ? L(
+              `Synced ${synced.length} file(s) directly to ${storageOwner}/${storageRepo} (${storageBranch}).`,
+              `تمت مزامنة ${synced.length} ملف(ات) بنجاح مع مستودع ${storageOwner}/${storageRepo}.`,
+              lang
+            )
+          : L(
+              `Synced ${synced.length} file(s), ${failed.length} failed (${failed[0]?.error || "error"}).`,
+              `تمت مزامنة ${synced.length} ملف(ات)، وفشل ${failed.length}.`,
+              lang
+            );
+      setOpStatus(summary);
+      onNotify(summary);
+    } catch (err) {
+      setOpIsError(true);
+      setOpStatus(err instanceof Error ? err.message : "Failed to sync local changes.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePullFromGitHub = async () => {
+    setBusy(true);
+    setOpStatus(
+      L(
+        `Pulling latest datasets from ${storageOwner}/${storageRepo} (${storageBranch})...`,
+        `جارٍ سحب أحدث البيانات من ${storageOwner}/${storageRepo}...`,
+        lang
+      )
+    );
+    try {
+      const pullTargets = [
+        { datasetPath: "./data/projects/projects.json", repoPath: "public/data/projects/projects.json" },
+        { datasetPath: "./data/journal/articles.json", repoPath: "public/data/journal/articles.json" },
+        { datasetPath: "./data/journal/issues.json", repoPath: "public/data/journal/issues.json" },
+        { datasetPath: "./data/knowledge/entries.json", repoPath: "public/data/knowledge/entries.json" },
+        { datasetPath: "./data/settings/website.json", repoPath: "public/data/settings/website.json" },
+      ];
+
+      let pulledCount = 0;
+      for (const item of pullTargets) {
+        try {
+          const res = await fetchJsonFromGitHubRepo({
+            token: githubToken.trim() || undefined,
+            owner: storageOwner,
+            repo: storageRepo,
+            branch: storageBranch,
+            repoPath: item.repoPath,
+          });
+          updateDatasetCache(item.datasetPath, res.data);
+          removeLocalDraft(item.datasetPath);
+          pulledCount += 1;
+        } catch {
+          // Skip missing optional dataset files
+        }
+      }
+
+      setDraftVersion((v) => v + 1);
+      if (pulledCount > 0) {
+        await onReloadFromSource?.();
+        onAudit("Pulled Datasets from GitHub Repo", `${storageOwner}/${storageRepo} (${pulledCount})`);
+        const msg = L(
+          `Pulled ${pulledCount} dataset(s) from ${storageOwner}/${storageRepo} into the active hub.`,
+          `تم سحب ${pulledCount} ملف(ات) بيانات من ${storageOwner}/${storageRepo} وتحديث المنصة.`,
+          lang
+        );
+        setOpStatus(msg);
+        onNotify(msg);
+      } else {
+        setOpStatus(
+          L(
+            "No matching dataset JSON files found in that repository/branch.",
+            "لم يتم العثور على ملفات بيانات متطابقة في هذا المستودع أو الفرع.",
+            lang
+          )
+        );
+      }
+    } catch (err) {
+      setOpStatus(err instanceof Error ? err.message : "Failed to pull datasets from GitHub.");
     } finally {
       setBusy(false);
     }
@@ -420,11 +616,15 @@ export const GitHubRepoStoragePanel: React.FC<{
             </label>
             <input
               id="gh-session-pat"
+              ref={patInputRef}
               type="password"
               dir="ltr"
               autoComplete="off"
               value={githubToken}
-              onChange={(e) => onChangeGithubToken(e.target.value)}
+              onChange={(e) => {
+                setOpIsError(false);
+                onChangeGithubToken(e.target.value);
+              }}
               placeholder="github_pat_... (contents:write)"
               className="w-full px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
             />
@@ -438,6 +638,177 @@ export const GitHubRepoStoragePanel: React.FC<{
           </button>
         </div>
       </form>
+
+      {/* Pending Local Changes & Direct GitHub Repository Sync */}
+      <div
+        data-testid="github-local-sync-panel"
+        className="rounded-xl border border-[var(--hub-border)] hub-subtle p-4 space-y-3"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold inline-flex items-center gap-1.5">
+              <GitCommitHorizontal className="w-4 h-4 text-[var(--hub-secondary)]" />
+              <span>
+                {L(
+                  "Sync Local Changes & Project Updates to GitHub",
+                  "مزامنة التعديلات المحلية وتحديثات المشاريع إلى GitHub",
+                  lang
+                )}
+              </span>
+            </h3>
+            <p className="text-xs text-[var(--hub-text-muted)]">
+              {L(
+                "Commit local edits (projects, articles, settings) directly to your configured GitHub repository as a persistent storage backend.",
+                "ارفع التعديلات المحلية (المشاريع، المقالات، الإعدادات) مباشرة لمستودع GitHub كقاعدة تخزين دائمة.",
+                lang
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="pull-github-datasets-btn"
+            disabled={busy}
+            onClick={handlePullFromGitHub}
+            className="px-3 py-1.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-semibold inline-flex items-center gap-1.5 hover:border-[var(--hub-secondary)] cursor-pointer disabled:opacity-50"
+          >
+            <CloudDownload className="w-3.5 h-3.5" />
+            <span>{L("Pull Latest from Repo", "سحب أحدث البيانات من المستودع", lang)}</span>
+          </button>
+        </div>
+
+        {pendingDrafts.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-[var(--hub-border)] bg-[var(--hub-bg)] px-3.5 py-3 text-xs text-[var(--hub-text-muted)]">
+            {L(
+              "All local drafts are clean — edit a project, article, or setting to queue changes for GitHub commit.",
+              "لا توجد تعديلات محلية معلقة حالياً — عدّل مشروعاً أو مقالاً لإدراجه في المزامنة.",
+              lang
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <ul className="divide-y divide-[var(--hub-border)] border border-[var(--hub-border)] rounded-lg overflow-hidden bg-[var(--hub-bg)]">
+              {pendingDrafts.map((draft) => {
+                const checked = !deselectedPaths.includes(draft.datasetPath);
+                return (
+                  <li key={draft.datasetPath} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <label className="inline-flex items-center gap-2 cursor-pointer min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDraftSelection(draft.datasetPath)}
+                      />
+                      <span className="font-mono font-semibold truncate">{draft.repoPath}</span>
+                    </label>
+                    <div className="text-[11px] font-mono text-[var(--hub-text-muted)] flex items-center gap-2">
+                      {draft.itemCount !== null && (
+                        <span>
+                          {draft.itemCount} {L("items", "عناصر", lang)}
+                        </span>
+                      )}
+                      <span>{formatBytesCompact(draft.sizeBytes)}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2.5 items-center">
+              <input
+                type="text"
+                value={syncCommitMsg}
+                onChange={(e) => setSyncCommitMsg(e.target.value)}
+                placeholder={L("Commit message prefix", "رسالة الحفظ (Commit)", lang)}
+                aria-label={L("GitHub sync commit message", "رسالة الحفظ في GitHub", lang)}
+                className="px-3 py-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-xs font-mono"
+              />
+              <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clearDraftsOnSync}
+                  onChange={(e) => setClearDraftsOnSync(e.target.checked)}
+                />
+                <span>{L("Clear local drafts after sync", "مسح المسودات المحلية بعد الرفع", lang)}</span>
+              </label>
+            </div>
+
+            {!confirmSyncPending ? (
+              <button
+                type="button"
+                data-testid="sync-local-changes-btn"
+                disabled={busy || selectedDrafts.length === 0}
+                onClick={() => {
+                  if (!githubToken.trim()) {
+                    handleSyncSelectedDrafts();
+                    return;
+                  }
+                  setConfirmSyncPending(true);
+                }}
+                className="px-4 py-2 rounded-lg bg-[var(--hub-secondary)] text-white text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <GitCommitHorizontal className="w-4 h-4" />
+                <span>
+                  {L(
+                    `Sync ${selectedDrafts.length} Change(s) to ${storageOwner}/${storageRepo}`,
+                    `مزامنة ${selectedDrafts.length} تعديل(ات) إلى ${storageOwner}/${storageRepo}`,
+                    lang
+                  )}
+                </span>
+              </button>
+            ) : (
+              <div
+                role="dialog"
+                aria-label={L("Confirm GitHub repository commit", "تأكيد الدفع إلى مستودع GitHub", lang)}
+                data-testid="github-sync-confirm-dialog"
+                className="rounded-lg border border-[var(--hub-secondary)]/40 bg-[var(--hub-bg)] p-3 flex flex-wrap items-center justify-between gap-2 text-xs"
+              >
+                <span className="font-medium">
+                  {L(
+                    `Commit ${selectedDrafts.length} dataset file(s) to ${storageOwner}/${storageRepo} (${storageBranch})?`,
+                    `تأكيد رفع ${selectedDrafts.length} ملف(ات) بيانات إلى ${storageOwner}/${storageRepo}؟`,
+                    lang
+                  )}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="confirm-github-sync-btn"
+                    onClick={handleSyncSelectedDrafts}
+                    className="px-3 py-1.5 rounded-md bg-[var(--hub-secondary)] text-white font-semibold cursor-pointer"
+                  >
+                    {L("Confirm & Push", "تأكيد ورفع", lang)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmSyncPending(false)}
+                    className="px-3 py-1.5 rounded-md border border-[var(--hub-border)] cursor-pointer"
+                  >
+                    {L("Cancel", "إلغاء", lang)}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {lastSyncOutcomes.length > 0 && (
+          <ul className="space-y-1 text-xs font-mono">
+            {lastSyncOutcomes.map((o) => (
+              <li
+                key={o.repoPath}
+                className={o.ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}
+              >
+                {o.ok ? "✓" : "✕"} {o.repoPath}{" "}
+                {o.htmlUrl && (
+                  <a href={o.htmlUrl} target="_blank" rel="noopener noreferrer" className="underline ms-1">
+                    {L("View commit file", "عرض في GitHub", lang)}
+                  </a>
+                )}
+                {o.error ? ` — ${o.error}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* Actions: Upload Files, Browse Folder, Publish Dataset JSON */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4 border-t border-[var(--hub-border)]">
@@ -513,8 +884,15 @@ export const GitHubRepoStoragePanel: React.FC<{
       </div>
 
       {opStatus && (
-        <div className="rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] px-3.5 py-2.5 text-xs text-[var(--hub-secondary)] font-mono">
-          {opStatus}
+        <div
+          className={`rounded-lg border px-3.5 py-2.5 text-xs font-mono flex items-center gap-2 ${
+            opIsError
+              ? "border-red-500/40 bg-red-500/5 text-red-700 dark:text-red-300"
+              : "border-[var(--hub-border)] bg-[var(--hub-bg)] text-[var(--hub-secondary)]"
+          }`}
+        >
+          {busy && <LoadingSpinner size="sm" inline />}
+          <span>{opStatus}</span>
         </div>
       )}
 

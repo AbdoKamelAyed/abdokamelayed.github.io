@@ -2,6 +2,7 @@ import type { HubRoute } from "./breadcrumbs";
 
 export type SkeletonVariant =
   | "home"
+  | "now"
   | "projects-grid"
   | "project-detail"
   | "github"
@@ -19,6 +20,8 @@ export function resolveSkeletonVariant(route: HubRoute): SkeletonVariant {
   switch (route.section) {
     case "home":
       return "home";
+    case "now":
+      return "now";
     case "projects":
       return route.param ? "project-detail" : "projects-grid";
     case "github":
@@ -38,5 +41,7 @@ export function resolveSkeletonVariant(route: HubRoute): SkeletonVariant {
       return "contact";
     case "admin":
       return "admin";
+    case "not-found":
+      return "home";
   }
 }

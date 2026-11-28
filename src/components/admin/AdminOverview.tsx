@@ -1,24 +1,27 @@
 import React, { useMemo, useState } from "react";
-import { Activity, BookMarked, BookOpen, CheckCircle2, Download, FolderGit2, Layers, PenSquare, RotateCcw, Settings2 } from "lucide-react";
+import { Activity, BookMarked, BookOpen, CheckCircle2, Download, Eye, FolderGit2, Layers, PenSquare, RotateCcw, Settings2 } from "lucide-react";
 import type { HubDatasets, Lang } from "../../types/hub";
 import { clearLocalDrafts, getLocalDraftCount } from "../../services/dataService";
-import type { AdminAuditEntry } from "../../utils/adminAuth";
+import { listAdminAccounts, type AdminAuditEntry, type AdminSessionRecord } from "../../utils/adminAuth";
+import { canAccessAdminModule, type AdminWorkspaceSection } from "../../utils/adminPermissions";
 import { calculateReadingTimeMinutes, countWords, validateCollectionSchema } from "../../utils/analytics";
 import { formatDateTime, L, loc } from "../../utils/i18n";
+import type { VisitInsightsStore } from "../../utils/visitInsights";
 import { AdminCharts } from "./AdminCharts";
 
 export const AdminOverview: React.FC<{
   data: HubDatasets;
   lang: Lang;
   auditLog: AdminAuditEntry[];
-  onNavigateTab: (
-    tab: "overview" | "projects" | "editor" | "media" | "issues" | "knowledge" | "github" | "settings"
-  ) => void;
+  session?: AdminSessionRecord;
+  visitStore?: VisitInsightsStore;
+  onNavigateTab: (tab: AdminWorkspaceSection) => void;
   onReloadFromSource: () => Promise<void>;
   onNotify: (msg: string) => void;
   onExportBundle: () => void;
-}> = ({ data, lang, auditLog, onNavigateTab, onReloadFromSource, onNotify, onExportBundle }) => {
+}> = ({ data, lang, auditLog, session, visitStore, onNavigateTab, onReloadFromSource, onNotify, onExportBundle }) => {
   const [confirmReset, setConfirmReset] = useState(false);
+  const canOpen = (mod: AdminWorkspaceSection) => !session || canAccessAdminModule(session, mod);
 
   const metrics = useMemo(() => {
     const publishedArticles = data.allArticlesRaw.filter((a) => a.status === "published");
@@ -130,46 +133,69 @@ export const AdminOverview: React.FC<{
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onNavigateTab("editor")}
-            className="px-3.5 py-2 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <PenSquare className="w-3.5 h-3.5" />
-            <span>{L("Open Rich Editor", "فتح المحرر المتقدم", lang)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigateTab("media")}
-            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>{L("Media Library", "مكتبة الوسائط", lang)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigateTab("issues")}
-            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <BookMarked className="w-3.5 h-3.5" />
-            <span>{L("Issues & PDF Maker", "الأعداد وصانع PDF", lang)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigateTab("projects")}
-            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <FolderGit2 className="w-3.5 h-3.5" />
-            <span>{L("Projects", "المشاريع", lang)}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigateTab("settings")}
-            className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <Settings2 className="w-3.5 h-3.5" />
-            <span>{L("SEO & Settings", "SEO والإعدادات", lang)}</span>
-          </button>
+          {canOpen("editor") && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab("editor")}
+              className="px-3.5 py-2 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <PenSquare className="w-3.5 h-3.5" />
+              <span>{L("Open Rich Editor", "فتح المحرر المتقدم", lang)}</span>
+            </button>
+          )}
+          {canOpen("media") && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab("media")}
+              className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>{L("Media Library", "مكتبة الوسائط", lang)}</span>
+            </button>
+          )}
+          {canOpen("issues") && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab("issues")}
+              className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <BookMarked className="w-3.5 h-3.5" />
+              <span>{L("Issues & PDF Maker", "الأعداد وصانع PDF", lang)}</span>
+            </button>
+          )}
+          {canOpen("projects") && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab("projects")}
+              className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <FolderGit2 className="w-3.5 h-3.5" />
+              <span>{L("Projects", "المشاريع", lang)}</span>
+            </button>
+          )}
+          {canOpen("visits") && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab("visits")}
+              className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>
+                {L("Visit Insights", "تحليلات الزيارات", lang)}
+                {visitStore ? ` (${visitStore.totalVisits})` : ""}
+              </span>
+            </button>
+          )}
+          {canOpen("settings") && (
+            <button
+              type="button"
+              onClick={() => onNavigateTab("settings")}
+              className="px-3.5 py-2 rounded-lg border border-[var(--hub-border)] text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
+              <span>{L("SEO & Settings", "SEO والإعدادات", lang)}</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onExportBundle}
@@ -181,8 +207,14 @@ export const AdminOverview: React.FC<{
         </div>
       </div>
 
-      {/* Data-Driven SVG Analytics Charts */}
-      <AdminCharts data={data} lang={lang} />
+      {/* Data-Driven Role-Tailored SVG Analytics Charts */}
+      <AdminCharts
+        data={data}
+        lang={lang}
+        role={session?.role || "Owner"}
+        accounts={listAdminAccounts()}
+        auditLog={auditLog}
+      />
 
       {/* Main Analytics + Activity Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

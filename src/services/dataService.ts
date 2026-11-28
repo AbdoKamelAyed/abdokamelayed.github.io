@@ -9,11 +9,93 @@ import type {
 const CACHE_PREFIX = "abdo_hub_cache_v1:";
 export const DRAFT_PREFIX = "abdo_hub_admin_draft:";
 
+export interface LocalDraftRecord {
+  datasetPath: string;
+  repoPath: string;
+  label: string;
+  itemCount: number | null;
+  updatedAt: string | null;
+  sizeBytes: number;
+  payload: unknown;
+}
+
+export function mapDatasetPathToRepoPath(datasetPath: string): string {
+  const clean = datasetPath.trim().replace(/^\.\//, "").replace(/^\/+/, "");
+  if (clean.startsWith("public/")) return clean;
+  if (clean.startsWith("data/")) return `public/${clean}`;
+  return `public/data/${clean}`;
+}
+
 export function saveLocalDraft(datasetPath: string, payload: unknown): void {
   try {
     localStorage.setItem(`${DRAFT_PREFIX}${datasetPath}`, JSON.stringify(payload));
   } catch {
     // Ignore restricted or full localStorage
+  }
+}
+
+export function removeLocalDraft(datasetPath: string): void {
+  try {
+    localStorage.removeItem(`${DRAFT_PREFIX}${datasetPath}`);
+  } catch {
+    // Ignore restricted localStorage
+  }
+}
+
+export function hasLocalDraft(datasetPath: string): boolean {
+  try {
+    return localStorage.getItem(`${DRAFT_PREFIX}${datasetPath}`) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function updateDatasetCache(datasetPath: string, payload: unknown): void {
+  try {
+    localStorage.setItem(`${CACHE_PREFIX}${datasetPath}`, JSON.stringify(payload));
+  } catch {
+    // Ignore restricted or full localStorage
+  }
+}
+
+export function listLocalDrafts(): LocalDraftRecord[] {
+  try {
+    const keys = Object.keys(localStorage)
+      .filter((k) => k.startsWith(DRAFT_PREFIX))
+      .sort((a, b) => {
+        if (a.includes("projects.json")) return -1;
+        if (b.includes("projects.json")) return 1;
+        return a.localeCompare(b);
+      });
+
+    const drafts: LocalDraftRecord[] = [];
+    for (const fullKey of keys) {
+      const raw = localStorage.getItem(fullKey);
+      if (!raw) continue;
+      const datasetPath = fullKey.slice(DRAFT_PREFIX.length);
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+      const items = obj && Array.isArray(obj.items) ? obj.items : null;
+      const updatedAt = obj && typeof obj.updatedAt === "string" ? obj.updatedAt : null;
+      const fileName = datasetPath.split("/").pop() || datasetPath;
+      drafts.push({
+        datasetPath,
+        repoPath: mapDatasetPathToRepoPath(datasetPath),
+        label: fileName,
+        itemCount: items ? items.length : null,
+        updatedAt,
+        sizeBytes: new TextEncoder().encode(raw).length,
+        payload: parsed,
+      });
+    }
+    return drafts;
+  } catch {
+    return [];
   }
 }
 

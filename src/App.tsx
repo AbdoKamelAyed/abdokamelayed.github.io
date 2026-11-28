@@ -1,4 +1,4 @@
-import React, { Component, Suspense, lazy, useCallback, useEffect, useState } from "react";
+import React, { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HubDatasets, Lang } from "./types/hub";
 import { loadAllDatasets } from "./services/dataService";
 import {
@@ -8,18 +8,32 @@ import {
   getPairedPolarityThemeId,
 } from "./utils/designThemes";
 import {
-  applyFontScaleToDocument,
-  DEFAULT_FONT_SCALE,
+  applyArticleFontScale,
   normalizeFontScale,
   stepFontScale,
   type FontScale,
 } from "./utils/typography";
+import {
+  loadVisitStore,
+  resetVisitStore,
+  resolveRouteVisitTitle,
+  trackRouteVisit,
+  type VisitInsightsStore,
+} from "./utils/visitInsights";
 import { L } from "./utils/i18n";
+import {
+  buildAdminRouteHref,
+  navigateToHash,
+  parseAppRoute,
+  toLegacyRoute,
+  type AppRoute,
+} from "./utils/router";
 import { applyPageSeoMetadata } from "./utils/seoEngine";
-import { Layout, type RouteSection } from "./components/Layout";
+import { Layout } from "./components/Layout";
 import { InitialAppShellSkeleton, PageSkeleton } from "./components/PageSkeletons";
 
 const HomePage = lazy(() => import("./pages/HomePage").then((m) => ({ default: m.HomePage })));
+const NowPage = lazy(() => import("./pages/NowPage").then((m) => ({ default: m.NowPage })));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage").then((m) => ({ default: m.ProjectsPage })));
 const ProjectDetailPage = lazy(() =>
   import("./pages/ProjectDetailPage").then((m) => ({ default: m.ProjectDetailPage }))
@@ -104,28 +118,23 @@ class HubErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
   }
 }
 
-function parseHash(): { section: RouteSection; param: string | null; subParam: string | null } {
-  const raw = window.location.hash.replace(/^#\/?/, "");
-  const parts = raw.split("/").filter(Boolean);
-  const valid: RouteSection[] = ["home", "projects", "github", "work", "journal", "knowledge", "about", "contact", "admin"];
-  const candidate = (parts[0] || "home") as RouteSection;
-  return {
-    section: valid.includes(candidate) ? candidate : "home",
-    param: parts[1] || null,
-    subParam: parts[2] || null,
-  };
+function readCurrentRoute(): AppRoute {
+  return parseAppRoute(window.location.hash);
 }
 
 function AppContent() {
   const [data, setData] = useState<HubDatasets | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [route, setRoute] = useState(parseHash);
+  const [route, setRoute] = useState<AppRoute>(readCurrentRoute);
   const [lang, setLang] = useState<Lang>(() => (safeStorageGet(LANG_KEY) === "ar" ? "ar" : "en"));
   const [theme, setTheme] = useState<"light" | "dark">(() => (safeStorageGet(THEME_KEY) === "dark" ? "dark" : "light"));
   const [fontScale, setFontScale] = useState<FontScale>(() =>
     normalizeFontScale(safeStorageGet(FONT_SCALE_KEY))
   );
+  const [visitStore, setVisitStore] = useState<VisitInsightsStore>(() => loadVisitStore());
+  const legacyRoute = useMemo(() => toLegacyRoute(route), [route]);
+  const lastTrackedPathRef = useRef<string>("");
 
   const applyThemeVars = useCallback(
     (website: HubDatasets["website"] | undefined, polarity: "light" | "dark") => {
@@ -189,13 +198,13 @@ function AppContent() {
   }, [data?.website, theme, applyThemeVars]);
 
   useEffect(() => {
-    applyFontScaleToDocument(fontScale);
+    applyArticleFontScale(fontScale);
     safeStorageSet(FONT_SCALE_KEY, fontScale);
   }, [fontScale]);
 
   useEffect(() => {
     const onHash = () => {
-      setRoute(parseHash());
+      setRoute(readCurrentRoute());
       window.scrollTo({ top: 0, behavior: "auto" });
     };
     window.addEventListener("hashchange", onHash);
@@ -204,8 +213,34 @@ function AppContent() {
 
   useEffect(() => {
     if (!data) return;
-    applyPageSeoMetadata(data, route, lang);
-  }, [data, route, lang]);
+    applyPageSeoMetadata(data, legacyRoute, lang);
+  }, [data, legacyRoute, lang]);
+
+  useEffect(() => {
+    if (!data || isLoading) return;
+    const visitKey = `${route.path}|${lang}`;
+    if (lastTrackedPathRef.current === visitKey) return;
+    lastTrackedPathRef.current = visitKey;
+
+    const targetId =
+      route.kind === "article-detail" || route.kind === "project-detail" || route.kind === "issue-detail"
+        ? route.slugOrId
+        : undefined;
+    const nextStore = trackRouteVisit({
+      path: route.path,
+      section: route.kind,
+      targetId,
+      title: resolveRouteVisitTitle(data, legacyRoute, lang),
+      lang,
+    });
+    setVisitStore((prev) =>
+      prev.totalVisits === nextStore.totalVisits &&
+      prev.lastRecordedAtMs === nextStore.lastRecordedAtMs &&
+      prev.lastRecordedPath === nextStore.lastRecordedPath
+        ? prev
+        : nextStore
+    );
+  }, [data, isLoading, route, legacyRoute, lang]);
 
   if (loadFailed) {
     return (
@@ -226,110 +261,161 @@ function AppContent() {
   }
 
   if (!data) {
-    return <InitialAppShellSkeleton route={route} lang={lang} />;
+    return <InitialAppShellSkeleton route={legacyRoute} lang={lang} />;
   }
+
+  const handleApplyWebsiteTheme = (website: HubDatasets["website"]) => {
+    const targetId = website.designThemeId || DEFAULT_DESIGN_THEME_ID;
+    const resolved = getDesignThemeById(targetId);
+    const nextPolarity = website.defaultTheme || resolved.polarity;
+    setData((prev) => (prev ? { ...prev, website } : prev));
+    setTheme(nextPolarity);
+    safeStorageSet(THEME_KEY, nextPolarity);
+    if (website.defaultFontScale) {
+      const nextScale = normalizeFontScale(website.defaultFontScale);
+      setFontScale(nextScale);
+      safeStorageSet(FONT_SCALE_KEY, nextScale);
+    }
+    applyThemeVars(website, nextPolarity);
+  };
+
+  if (route.kind === "admin") {
+    return (
+      <HubErrorBoundary resetKey={`admin/${route.adminSection}`}>
+        <Suspense fallback={<InitialAppShellSkeleton route={legacyRoute} lang={lang} />}>
+          {isLoading ? (
+            <div className="min-h-screen p-6 max-w-7xl mx-auto">
+              <PageSkeleton route={legacyRoute} lang={lang} />
+            </div>
+          ) : (
+            <AdminPage
+              data={data}
+              lang={lang}
+              theme={theme}
+              activeSection={route.adminSection}
+              invalidSubSection={route.invalidSubSection}
+              visitStore={visitStore}
+              onResetVisits={() => setVisitStore(resetVisitStore())}
+              onNavigateSection={(nextSec) => navigateToHash(buildAdminRouteHref(nextSec))}
+              onToggleTheme={() => {
+                const nextPolarity = theme === "dark" ? "light" : "dark";
+                setTheme(nextPolarity);
+                safeStorageSet(THEME_KEY, nextPolarity);
+              }}
+              onToggleLang={() => setLang((l) => (l === "ar" ? "en" : "ar"))}
+              onUpdateData={(updater) => setData((prev) => (prev ? updater(prev) : prev))}
+              onReloadFromSource={fetchDatasets}
+              onApplyWebsiteTheme={handleApplyWebsiteTheme}
+            />
+          )}
+        </Suspense>
+      </HubErrorBoundary>
+    );
+  }
+
+  const handleStepArticleFontScale = (delta: -1 | 1) => {
+    setFontScale((prev) => {
+      const next = stepFontScale(prev, delta);
+      safeStorageSet(FONT_SCALE_KEY, next);
+      return next;
+    });
+  };
+
+  const handleSelectArticleFontScale = (nextScale: FontScale) => {
+    const normalized = normalizeFontScale(nextScale);
+    setFontScale(normalized);
+    safeStorageSet(FONT_SCALE_KEY, normalized);
+  };
 
   return (
       <Layout
-        section={route.section}
-        param={route.param}
-        subParam={route.subParam}
+        section={legacyRoute.section}
+        param={legacyRoute.param}
+        subParam={legacyRoute.subParam}
         lang={lang}
         theme={theme}
-        fontScale={fontScale}
         data={data}
         onToggleLang={() => setLang((l) => (l === "ar" ? "en" : "ar"))}
         onSetTheme={(nextPolarity) => {
           setTheme(nextPolarity);
           safeStorageSet(THEME_KEY, nextPolarity);
         }}
-        onStepFontScale={(delta) => {
-          setFontScale((prev) => {
-            const next = stepFontScale(prev, delta);
-            safeStorageSet(FONT_SCALE_KEY, next);
-            return next;
-          });
-        }}
-        onSelectFontScale={(nextScale) => {
-          const normalized = normalizeFontScale(nextScale);
-          setFontScale(normalized);
-          safeStorageSet(FONT_SCALE_KEY, normalized);
-        }}
-        onResetVisitorPreferences={() => {
-          try {
-            localStorage.removeItem(THEME_KEY);
-            localStorage.removeItem(FONT_SCALE_KEY);
-          } catch {
-            // Ignore restricted storage
-          }
-          const defaultPolarity = data.website.defaultTheme || "light";
-          const defaultScale = normalizeFontScale(data.website.defaultFontScale || DEFAULT_FONT_SCALE);
-          setTheme(defaultPolarity);
-          setFontScale(defaultScale);
-        }}
       >
         {isLoading ? (
-          <PageSkeleton route={route} lang={lang} />
+          <PageSkeleton route={legacyRoute} lang={lang} />
         ) : (
-          <HubErrorBoundary resetKey={`${route.section}/${route.param ?? ""}/${route.subParam ?? ""}`}>
-            <Suspense fallback={<PageSkeleton route={route} lang={lang} />}>
-              {route.section === "home" && <HomePage data={data} lang={lang} />}
-              {route.section === "projects" &&
-                (route.param ? (
-                  <ProjectDetailPage data={data} slugOrId={route.param} lang={lang} />
-                ) : (
-                  <ProjectsPage data={data} lang={lang} />
-                ))}
-              {route.section === "github" && <GithubPage data={data} lang={lang} />}
-              {route.section === "work" && <WorkPage data={data} lang={lang} />}
-              {route.section === "journal" &&
-                (route.param === "issues" && route.subParam ? (
-                  <IssueDetailPage data={data} slugOrId={route.subParam} lang={lang} />
-                ) : route.param === "issues" ? (
-                  <JournalPage data={data} lang={lang} initialView="issues" />
-                ) : route.param ? (
-                  <ArticleDetailPage data={data} slugOrId={route.param} lang={lang} />
-                ) : (
-                  <JournalPage data={data} lang={lang} />
-                ))}
-              {route.section === "knowledge" && <KnowledgePage data={data} lang={lang} />}
-              {route.section === "about" && <AboutPage data={data} lang={lang} />}
-              {route.section === "contact" && <ContactPage data={data} lang={lang} />}
-              {route.section === "admin" && (
-                <AdminPage
+          <HubErrorBoundary resetKey={route.path}>
+            <Suspense fallback={<PageSkeleton route={legacyRoute} lang={lang} />}>
+              {route.kind === "home" && (
+                <HomePage data={data} lang={lang} visitStore={visitStore} />
+              )}
+              {route.kind === "now" && <NowPage data={data} lang={lang} />}
+              {route.kind === "projects" && <ProjectsPage data={data} lang={lang} />}
+              {route.kind === "project-detail" && (
+                <ProjectDetailPage data={data} slugOrId={route.slugOrId} lang={lang} />
+              )}
+              {route.kind === "github" && <GithubPage data={data} lang={lang} />}
+              {route.kind === "work" && <WorkPage data={data} lang={lang} />}
+              {route.kind === "journal" && <JournalPage data={data} lang={lang} />}
+              {route.kind === "issues" && (
+                <JournalPage data={data} lang={lang} initialView="issues" />
+              )}
+              {route.kind === "issue-detail" && (
+                <IssueDetailPage
                   data={data}
+                  slugOrId={route.slugOrId}
                   lang={lang}
-                  onUpdateData={(updater) => setData((prev) => (prev ? updater(prev) : prev))}
-                  onReloadFromSource={fetchDatasets}
-                  onApplyWebsiteTheme={(website) => {
-                    const targetId = website.designThemeId || DEFAULT_DESIGN_THEME_ID;
-                    const resolved = getDesignThemeById(targetId);
-                    const nextPolarity = website.defaultTheme || resolved.polarity;
-                    setData((prev) => (prev ? { ...prev, website } : prev));
-                    setTheme(nextPolarity);
-                    safeStorageSet(THEME_KEY, nextPolarity);
-                    if (website.defaultFontScale) {
-                      const nextScale = normalizeFontScale(website.defaultFontScale);
-                      setFontScale(nextScale);
-                      safeStorageSet(FONT_SCALE_KEY, nextScale);
-                    }
-                    applyThemeVars(website, nextPolarity);
-                  }}
+                  fontScale={fontScale}
+                  onStepFontScale={handleStepArticleFontScale}
+                  onSelectFontScale={handleSelectArticleFontScale}
                 />
               )}
-              {route.section !== "home" &&
-                route.section !== "projects" &&
-                route.section !== "github" &&
-                route.section !== "work" &&
-                route.section !== "journal" &&
-                route.section !== "knowledge" &&
-                route.section !== "about" &&
-                route.section !== "contact" &&
-                route.section !== "admin" && (
-                  <div className="p-8 text-center text-sm">
-                    {L("Section not found.", "القسم غير موجود.", lang)}
+              {route.kind === "article-detail" && (
+                <ArticleDetailPage
+                  data={data}
+                  slugOrId={route.slugOrId}
+                  lang={lang}
+                  fontScale={fontScale}
+                  visitStore={visitStore}
+                  onStepFontScale={handleStepArticleFontScale}
+                  onSelectFontScale={handleSelectArticleFontScale}
+                />
+              )}
+              {route.kind === "knowledge" && <KnowledgePage data={data} lang={lang} />}
+              {route.kind === "about" && <AboutPage data={data} lang={lang} />}
+              {route.kind === "contact" && <ContactPage data={data} lang={lang} />}
+              {route.kind === "not-found" && (
+                <section
+                  data-testid="route-not-found"
+                  className="rounded-2xl border border-[var(--hub-border)] hub-surface p-8 max-w-xl mx-auto text-center space-y-4"
+                >
+                  <div className="text-xs font-mono text-[var(--hub-text-muted)]">404</div>
+                  <h1 className="font-display text-2xl font-bold">
+                    {L("Page Not Found", "الصفحة غير موجودة", lang)}
+                  </h1>
+                  <p className="text-sm text-[var(--hub-text-muted)] break-words [overflow-wrap:anywhere]">
+                    {L(
+                      `The requested route "${route.path}" does not match any section in the hub.`,
+                      `المسار المطلوب "${route.path}" غير موجود في المنصة.`,
+                      lang
+                    )}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    <a
+                      href="#/"
+                      className="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--hub-primary)] text-[var(--hub-bg)]"
+                    >
+                      {L("Return Home", "العودة للرئيسية", lang)}
+                    </a>
+                    <a
+                      href="#/projects"
+                      className="px-4 py-2 rounded-lg text-sm font-semibold border border-[var(--hub-border)]"
+                    >
+                      {L("Explore Projects", "استعراض المشاريع", lang)}
+                    </a>
                   </div>
-                )}
+                </section>
+              )}
             </Suspense>
           </HubErrorBoundary>
         )}

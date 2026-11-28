@@ -1,18 +1,23 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Code2,
   Copy,
   Download,
+  ExternalLink,
   FileText,
   FolderGit2,
+  HardDrive,
   Image as ImageIcon,
+  LogOut,
   Music,
   Plus,
+  RefreshCw,
   Trash2,
   UploadCloud,
   Video,
 } from "lucide-react";
+import type { User } from "firebase/auth";
 import type { HubDatasets, Lang, MediaAssetRecord, MediaAssetType } from "../../types/hub";
 import { saveLocalDraft } from "../../services/dataService";
 import {
@@ -20,13 +25,28 @@ import {
   uploadFileToGitHubRepo,
 } from "../../services/githubStorageService";
 import {
+  deleteGoogleDriveFile,
+  getCurrentGoogleUser,
+  getGoogleDriveAccessToken,
+  googleDriveSignIn,
+  googleDriveSignOut,
+  initGoogleDriveAuth,
+  listGoogleDriveFiles,
+  uploadFileToGoogleDrive,
+} from "../../services/googleDriveService";
+import {
   deleteMediaBlob,
   detectMediaTypeFromFile,
   saveMediaBlob,
 } from "../../services/mediaLibraryService";
 import { formatBytesCompact, slugify } from "../../utils/analytics";
+import {
+  mapDriveFileToMediaAsset,
+  type GoogleDriveFileItem,
+} from "../../utils/googleDriveHelpers";
 import { L, loc } from "../../utils/i18n";
 import { CustomMediaViewer } from "../media/CustomMediaViewer";
+import { GoogleSignInButton } from "./GoogleSignInButton";
 
 export const MediaLibraryPanel: React.FC<{
   data: HubDatasets;
@@ -52,8 +72,8 @@ export const MediaLibraryPanel: React.FC<{
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  // Manual URL / Code / GitHub Repo asset creation
-  const [createMode, setCreateMode] = useState<"upload" | "github" | "url" | "code">("upload");
+  // Manual URL / Code / GitHub Repo / Google Drive asset creation
+  const [createMode, setCreateMode] = useState<"upload" | "github" | "drive" | "url" | "code">("upload");
   const [titleEn, setTitleEn] = useState("");
   const [captionEn, setCaptionEn] = useState("");
   const [mediaType, setMediaType] = useState<MediaAssetType>("pdf");
@@ -77,6 +97,34 @@ export const MediaLibraryPanel: React.FC<{
   const [ghUploading, setGhUploading] = useState(false);
   const [ghStatus, setGhStatus] = useState("");
   const ghFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Google Drive state (access token kept strictly in memory via googleDriveService)
+  const [driveNeedsAuth, setDriveNeedsAuth] = useState<boolean>(() => !getGoogleDriveAccessToken());
+  const [driveUser, setDriveUser] = useState<User | null>(() => getCurrentGoogleUser());
+  const [driveLoggingIn, setDriveLoggingIn] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
+  const [driveStatus, setDriveStatus] = useState("");
+  const [driveFiles, setDriveFiles] = useState<GoogleDriveFileItem[]>([]);
+  const [driveConfirmDelete, setDriveConfirmDelete] = useState<GoogleDriveFileItem | null>(null);
+  const [driveConfirmOverwrite, setDriveConfirmOverwrite] = useState<{
+    file: File;
+    existing: GoogleDriveFileItem;
+  } | null>(null);
+  const driveFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = initGoogleDriveAuth(
+      (user) => {
+        setDriveUser(user);
+        setDriveNeedsAuth(false);
+      },
+      () => {
+        setDriveUser(null);
+        setDriveNeedsAuth(true);
+      }
+    );
+    return unsubscribe;
+  }, []);
 
   const effectiveToken = githubToken || ghLocalToken;
   const updateToken = (next: string) => {
@@ -289,6 +337,143 @@ export const MediaLibraryPanel: React.FC<{
     }
   };
 
+  const refreshDriveList = async (tokenOverride?: string) => {
+    const token = tokenOverride || (await getGoogleDriveAccessToken());
+    if (!token) {
+      setDriveNeedsAuth(true);
+      return;
+    }
+    setDriveBusy(true);
+    try {
+      const files = await listGoogleDriveFiles({ accessToken: token, pageSize: 25 });
+      setDriveFiles(files);
+      setDriveStatus(
+        files.length === 0
+          ? L("No app files found in Google Drive yet.", "لا توجد ملفات مرفوعة على Google Drive بعد.", lang)
+          : L(`Loaded ${files.length} file(s) from Google Drive.`, `تم جلب ${files.length} ملف(ات) من Google Drive.`, lang)
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to list Google Drive files.";
+      setDriveStatus(msg);
+      if (msg.toLowerCase().includes("sign in")) {
+        setDriveNeedsAuth(true);
+      }
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const handleDriveSignIn = async () => {
+    setDriveLoggingIn(true);
+    setDriveStatus("");
+    try {
+      const { user, accessToken } = await googleDriveSignIn();
+      setDriveUser(user);
+      setDriveNeedsAuth(false);
+      await refreshDriveList(accessToken);
+    } catch (err) {
+      setDriveStatus(err instanceof Error ? err.message : "Google Sign-In failed.");
+    } finally {
+      setDriveLoggingIn(false);
+    }
+  };
+
+  const handleDriveSignOut = async () => {
+    await googleDriveSignOut();
+    setDriveUser(null);
+    setDriveNeedsAuth(true);
+    setDriveFiles([]);
+    setDriveConfirmDelete(null);
+    setDriveConfirmOverwrite(null);
+    setDriveStatus(L("Signed out of Google Drive.", "تم تسجيل الخروج من Google Drive.", lang));
+  };
+
+  const performDriveUpload = async (file: File, existingFileId?: string) => {
+    const token = await getGoogleDriveAccessToken();
+    if (!token) {
+      setDriveNeedsAuth(true);
+      return;
+    }
+    setDriveBusy(true);
+    setDriveStatus(L(`Uploading "${file.name}" to Google Drive...`, `جارٍ رفع "${file.name}" إلى Google Drive...`, lang));
+    try {
+      const uploaded = await uploadFileToGoogleDrive({
+        accessToken: token,
+        file,
+        existingFileId,
+      });
+      const detected = detectMediaTypeFromFile(file);
+      const codeText =
+        detected.mediaType === "code" && file.size <= 512_000 ? await file.text() : undefined;
+      const asset = mapDriveFileToMediaAsset({
+        driveFile: uploaded,
+        titleOverride: titleEn,
+        captionOverride: captionEn,
+        codeContent: codeText,
+        codeLanguage: detected.codeLanguage,
+      });
+      const next = [asset, ...data.mediaAssets.filter((a) => a.id !== asset.id)];
+      persistAssets(
+        next,
+        existingFileId ? "Updated Google Drive Asset" : "Uploaded to Google Drive",
+        uploaded.name
+      );
+      setSelectedId(asset.id);
+      setTitleEn("");
+      setCaptionEn("");
+      const msg = L(
+        `Saved "${uploaded.name}" to Google Drive and registered in Media Library.`,
+        `تم حفظ "${uploaded.name}" في Google Drive وتسجيله في مكتبة الوسائط.`,
+        lang
+      );
+      setDriveStatus(msg);
+      onNotify(msg);
+      await refreshDriveList(token);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Google Drive upload failed.";
+      setDriveStatus(msg);
+      onNotify(msg);
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const handleDriveFileSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    const match = driveFiles.find((f) => f.name.toLowerCase() === file.name.toLowerCase());
+    if (match) {
+      setDriveConfirmOverwrite({ file, existing: match });
+      return;
+    }
+    await performDriveUpload(file);
+  };
+
+  const handleConfirmDriveDelete = async () => {
+    if (!driveConfirmDelete) return;
+    const token = await getGoogleDriveAccessToken();
+    if (!token) {
+      setDriveNeedsAuth(true);
+      setDriveConfirmDelete(null);
+      return;
+    }
+    const target = driveConfirmDelete;
+    setDriveBusy(true);
+    try {
+      await deleteGoogleDriveFile({ accessToken: token, fileId: target.id });
+      setDriveConfirmDelete(null);
+      setDriveFiles((prev) => prev.filter((f) => f.id !== target.id));
+      onAudit("Deleted Google Drive File", target.name);
+      const msg = L(`Deleted "${target.name}" from Google Drive.`, `تم حذف "${target.name}" من Google Drive.`, lang);
+      setDriveStatus(msg);
+      onNotify(msg);
+    } catch (err) {
+      setDriveStatus(err instanceof Error ? err.message : "Failed to delete Google Drive file.");
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
   const copyEmbedCode = async (id: string) => {
     const snippet = `[[embed:${id}]]`;
     try {
@@ -331,9 +516,10 @@ export const MediaLibraryPanel: React.FC<{
                   [
                     ["upload", L("Local Upload", "رفع محلي", lang)],
                     ["github", L("GitHub Repo", "مستودع GitHub", lang)],
+                    ["drive", L("Google Drive", "Google Drive", lang)],
                     ["url", L("Remote URL", "رابط", lang)],
                     ["code", L("Code Snippet", "كود", lang)],
-                  ] as ["upload" | "github" | "url" | "code", string][]
+                  ] as ["upload" | "github" | "drive" | "url" | "code", string][]
                 ).map(([m, label]) => (
                   <button
                     key={m}
@@ -350,7 +536,202 @@ export const MediaLibraryPanel: React.FC<{
               </div>
             </div>
 
-            {createMode === "github" ? (
+            {createMode === "drive" ? (
+              <div data-testid="media-google-drive-panel" className="space-y-3">
+                <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-3 text-xs text-[var(--hub-text-muted)] flex items-start gap-2">
+                  <HardDrive className="w-4 h-4 text-[var(--hub-secondary)] shrink-0 mt-0.5" />
+                  <span>
+                    {L(
+                      "Upload media files directly to your Google Drive with permission and register share links in the Media Library.",
+                      "ارفع ملفات الوسائط مباشرة إلى Google Drive بعد موافقتك وسجّل روابطها في مكتبة الوسائط.",
+                      lang
+                    )}
+                  </span>
+                </div>
+
+                {driveNeedsAuth ? (
+                  <div className="rounded-xl border border-[var(--hub-border)] bg-[var(--hub-bg)] p-4 flex flex-col items-start gap-3">
+                    <p className="text-xs text-[var(--hub-text-muted)]">
+                      {L(
+                        "Sign in with Google to access and upload media files stored in Google Drive.",
+                        "سجّل الدخول عبر Google لرفع وإدارة ملفات الوسائط في Google Drive.",
+                        lang
+                      )}
+                    </p>
+                    <GoogleSignInButton
+                      onClick={handleDriveSignIn}
+                      disabled={driveLoggingIn}
+                      label={
+                        driveLoggingIn
+                          ? L("Signing in...", "جارٍ تسجيل الدخول...", lang)
+                          : L("Sign in with Google", "تسجيل الدخول عبر Google", lang)
+                      }
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] px-3 py-2 text-xs">
+                      <span className="truncate font-medium">
+                        {driveUser?.email || driveUser?.displayName || L("Google Drive connected", "تم الربط مع Google Drive", lang)}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          disabled={driveBusy}
+                          onClick={() => refreshDriveList()}
+                          className="px-2 py-1 rounded border border-[var(--hub-border)] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${driveBusy ? "animate-spin" : ""}`} />
+                          <span>{L("Refresh", "تحديث", lang)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDriveSignOut}
+                          className="px-2 py-1 rounded border border-[var(--hub-border)] inline-flex items-center gap-1 text-red-600 dark:text-red-400 cursor-pointer"
+                        >
+                          <LogOut className="w-3 h-3" />
+                          <span>{L("Sign Out", "خروج", lang)}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <input
+                      ref={driveFileInputRef}
+                      type="file"
+                      onChange={(e) => {
+                        handleDriveFileSelected(e.target.files);
+                        e.target.value = "";
+                      }}
+                      aria-label={L("Upload file to Google Drive", "رفع ملف إلى Google Drive", lang)}
+                      className="sr-only"
+                    />
+                    <button
+                      type="button"
+                      disabled={driveBusy}
+                      onClick={() => driveFileInputRef.current?.click()}
+                      className="w-full px-4 py-2.5 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <UploadCloud className="w-4 h-4" />
+                      <span>
+                        {driveBusy
+                          ? L("Working with Google Drive...", "جارٍ المعالجة في Google Drive...", lang)
+                          : L("Choose File & Upload to Google Drive", "اختر ملفاً للرفع إلى Google Drive", lang)}
+                      </span>
+                    </button>
+
+                    {driveConfirmOverwrite && (
+                      <div
+                        role="dialog"
+                        aria-label={L("Confirm Google Drive file overwrite", "تأكيد استبدال الملف في Google Drive", lang)}
+                        data-testid="drive-confirm-dialog"
+                        className="rounded-xl border border-amber-500/50 bg-amber-50/90 dark:bg-amber-950/50 p-3.5 space-y-2.5 text-xs"
+                      >
+                        <p className="font-semibold text-amber-950 dark:text-amber-100">
+                          {L(
+                            `Update the existing file "${driveConfirmOverwrite.existing.name}" in Google Drive?`,
+                            `هل تريد تحديث الملف الموجود "${driveConfirmOverwrite.existing.name}" في Google Drive؟`,
+                            lang
+                          )}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const pending = driveConfirmOverwrite;
+                              setDriveConfirmOverwrite(null);
+                              await performDriveUpload(pending.file, pending.existing.id);
+                            }}
+                            className="px-3 py-1.5 rounded-md bg-amber-600 text-white font-semibold cursor-pointer"
+                          >
+                            {L("Confirm Update", "تأكيد التحديث", lang)}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDriveConfirmOverwrite(null)}
+                            className="px-3 py-1.5 rounded-md border border-[var(--hub-border)] bg-[var(--hub-bg)] cursor-pointer"
+                          >
+                            {L("Cancel", "إلغاء", lang)}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {driveConfirmDelete && (
+                      <div
+                        role="dialog"
+                        aria-label={L("Confirm Google Drive file deletion", "تأكيد حذف الملف من Google Drive", lang)}
+                        data-testid="drive-confirm-dialog"
+                        className="rounded-xl border border-red-500/50 bg-red-50/90 dark:bg-red-950/50 p-3.5 space-y-2.5 text-xs"
+                      >
+                        <p className="font-semibold text-red-950 dark:text-red-100">
+                          {L(
+                            `Delete "${driveConfirmDelete.name}" from Google Drive? This action cannot be undone.`,
+                            `هل تريد حذف "${driveConfirmDelete.name}" من Google Drive؟ لا يمكن التراجع عن هذا الإجراء.`,
+                            lang
+                          )}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleConfirmDriveDelete}
+                            className="px-3 py-1.5 rounded-md bg-red-600 text-white font-semibold cursor-pointer"
+                          >
+                            {L("Confirm Delete", "تأكيد الحذف", lang)}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDriveConfirmDelete(null)}
+                            className="px-3 py-1.5 rounded-md border border-[var(--hub-border)] bg-[var(--hub-bg)] cursor-pointer"
+                          >
+                            {L("Cancel", "إلغاء", lang)}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {driveFiles.length > 0 && (
+                      <ul className="divide-y divide-[var(--hub-border)] border border-[var(--hub-border)] rounded-xl max-h-56 overflow-y-auto">
+                        {driveFiles.map((df) => (
+                          <li key={df.id} className="px-3 py-2 flex items-center justify-between gap-2 text-xs bg-[var(--hub-bg)]">
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">{df.name}</div>
+                              <div className="text-[11px] font-mono text-[var(--hub-text-muted)] truncate">
+                                {df.size ? formatBytesCompact(Number(df.size)) : df.mimeType}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {df.webViewLink && (
+                                <a
+                                  href={df.webViewLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={L(`Open ${df.name} in Google Drive`, `فتح ${df.name}`, lang)}
+                                  className="p-1.5 rounded border border-[var(--hub-border)] hover:text-[var(--hub-secondary)]"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setDriveConfirmDelete(df)}
+                                aria-label={L(`Delete ${df.name} from Google Drive`, `حذف ${df.name}`, lang)}
+                                className="p-1.5 rounded border border-red-500/40 text-red-600 dark:text-red-400 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {driveStatus && (
+                  <p className="text-xs text-[var(--hub-secondary)] leading-relaxed">{driveStatus}</p>
+                )}
+              </div>
+            ) : createMode === "github" ? (
               <div data-testid="media-github-storage-panel" className="space-y-3">
                 <div className="rounded-xl border border-[var(--hub-border)] hub-subtle p-3 text-xs text-[var(--hub-text-muted)] flex items-start gap-2">
                   <FolderGit2 className="w-4 h-4 text-[var(--hub-secondary)] shrink-0 mt-0.5" />

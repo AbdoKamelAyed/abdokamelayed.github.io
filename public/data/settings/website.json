@@ -4,6 +4,7 @@
   "shortTitle": "ABDO",
   "domain": "https://abdokamelayed.github.io",
   "defaultAuthor": "Abdo Kamel",
+  "ogImage": "/og-cover.jpg",
   "defaultLanguage": "en",
   "supportedLanguages": ["en", "ar"],
   "designThemeId": "swiss-studio",

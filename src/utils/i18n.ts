@@ -2,6 +2,7 @@ import type { Lang, LocalizedText } from "../types/hub";
 
 const DICT: Record<string, Record<Lang, string>> = {
   "nav.home": { en: "Home", ar: "الرئيسية" },
+  "nav.now": { en: "Working On Now", ar: "ما أعمل عليه الآن" },
   "nav.projects": { en: "Projects", ar: "المشاريع" },
   "nav.github": { en: "GitHub", ar: "جيت هاب" },
   "nav.work": { en: "Work", ar: "الخبرات" },
@@ -29,7 +30,17 @@ const DICT: Record<string, Record<Lang, string>> = {
   "home.recentGithub": { en: "Recent GitHub Activity", ar: "أحدث نشاط على GitHub" },
   "home.githubStats": { en: "GitHub Intelligence Snapshot", ar: "ملخص تحليلات GitHub" },
   "home.latestJournal": { en: "Latest Publications", ar: "أحدث المنشورات" },
+  "home.workingNow": { en: "What I'm Working On Now", ar: "ما أعمل عليه الآن" },
+  "home.workingNowSubtitle": {
+    en: "Active builds, current engineering initiatives, and ongoing research.",
+    ar: "المبادرات البرمجية الحالية، المشاريع قيد التطوير، ومجالات البحث النشطة.",
+  },
   "home.interests": { en: "Technical Interests & Achievements", ar: "الاهتمامات التقنية والإنجازات" },
+  "now.title": { en: "What I'm Working On Now", ar: "ما أعمل عليه الآن" },
+  "now.subtitle": {
+    en: "A live snapshot of active software builds, engineering roles, and recent repository momentum.",
+    ar: "نظرة مباشرة على المشاريع التي أطورها حالياً، أدواري الهندسية النشطة، وأحدث مستودعات الكود.",
+  },
   "github.title": { en: "GitHub Intelligence", ar: "تحليلات GitHub" },
   "github.subtitle": {
     en: "Automated public profile, repository explorer, language distribution, commit history, and development timeline.",

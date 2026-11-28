@@ -10,17 +10,35 @@ import {
 import { formatDateTime, L, loc, t } from "../utils/i18n";
 import { extractTableOfContents } from "../utils/markdown";
 import { buildArticlePdfInput, generatePdfBytes, triggerPdfDownload } from "../utils/pdfMaker";
+import { buildJournalPrintCoverMeta } from "../utils/printMetadata";
+import type { FontScale } from "../utils/typography";
+import { getArticleViewCount, type VisitInsightsStore } from "../utils/visitInsights";
+import { ArticleFontSizeControls } from "../components/ArticleFontSizeControls";
 import { AuthorAvatar, AuthorProfileCard } from "../components/AuthorProfileCard";
 import { ArticleCard } from "../components/Cards";
+import { PrintCoverPage } from "../components/PrintCoverPage";
 import { ReadingProgressBar } from "../components/ReadingProgressBar";
 import { RichContentView } from "../components/RichContentView";
+import { SocialSharePanel } from "../components/SocialSharePanel";
 import { TableOfContents } from "../components/TableOfContents";
 
 export const ArticleDetailPage: React.FC<{
   data: HubDatasets;
   slugOrId: string;
   lang: Lang;
-}> = ({ data, slugOrId, lang }) => {
+  fontScale: FontScale;
+  visitStore: VisitInsightsStore;
+  onStepFontScale: (delta: -1 | 1) => void;
+  onSelectFontScale: (scale: FontScale) => void;
+}> = ({
+  data,
+  slugOrId,
+  lang,
+  fontScale,
+  visitStore,
+  onStepFontScale,
+  onSelectFontScale,
+}) => {
   const target = decodeURIComponent(slugOrId);
   const article = data.articles.find((a) => a.slug === target || a.id === target);
   const articleRef = useRef<HTMLElement | null>(null);
@@ -82,6 +100,15 @@ export const ArticleDetailPage: React.FC<{
   const publishedDisplay = formatDateTime(article.publishedAt, lang);
   const updatedDisplay = formatDateTime(article.updatedAt, lang);
   const showUpdated = Boolean(article.updatedAt && updatedDisplay !== publishedDisplay);
+  const printCoverMeta = buildJournalPrintCoverMeta({
+    article,
+    siteName: data.website.siteName || "ABDO Digital Hub",
+    authorName,
+    authorHandle: authorHandle || undefined,
+    formattedDate: showUpdated ? `${publishedDisplay} (${updatedDisplay})` : publishedDisplay,
+    summaryText: summary?.text,
+    lang,
+  });
 
   const handleDownloadArticlePdf = () => {
     const input = buildArticlePdfInput(article, lang, data.website.siteName || "ABDO Digital Hub", summary?.text);
@@ -109,6 +136,12 @@ export const ArticleDetailPage: React.FC<{
         </a>
 
         <div className="flex flex-wrap items-center gap-2">
+          <ArticleFontSizeControls
+            fontScale={fontScale}
+            lang={lang}
+            onStepFontScale={onStepFontScale}
+            onSelectFontScale={onSelectFontScale}
+          />
           <button
             type="button"
             onClick={handleDownloadArticlePdf}
@@ -133,6 +166,7 @@ export const ArticleDetailPage: React.FC<{
       </div>
 
       <article ref={articleRef} className={`${hasToc ? "max-w-5xl" : "max-w-3xl"} mx-auto space-y-6`}>
+        <PrintCoverPage meta={printCoverMeta} lang={lang} />
         <header className="max-w-3xl space-y-3 border-b border-[var(--hub-border)] pb-6">
           <div className="text-xs text-[var(--hub-text-muted)] flex flex-wrap items-center gap-2">
             <span className="font-semibold text-blue-600 dark:text-blue-400">{article.type}</span>
@@ -141,6 +175,11 @@ export const ArticleDetailPage: React.FC<{
             <span aria-hidden="true">·</span>
             <span className="tabular-nums">
               {readingMinutes} {L("min read", "دقيقة قراءة", lang)}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="tabular-nums font-mono" data-testid="article-view-count">
+              {getArticleViewCount(visitStore, article.slug || article.id, article.id)}{" "}
+              {L("views", "مشاهدة", lang)}
             </span>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
@@ -237,6 +276,20 @@ export const ArticleDetailPage: React.FC<{
         <footer className="max-w-3xl pt-6 border-t border-[var(--hub-border)] text-xs font-mono text-[var(--hub-text-muted)]">
           {article.tags.map((tg) => `#${tg}`).join(" · ")}
         </footer>
+
+        <div className="max-w-3xl">
+          <SocialSharePanel
+            lang={lang}
+            domain={data.website.domain}
+            hashPath={`#/journal/${encodeURIComponent(article.slug || article.id)}`}
+            title={loc(article.title, lang)}
+            summary={article.seo?.description || loc(article.subtitle, lang)}
+            previewImageCandidate={article.coverImage}
+            fallbackPreviewImage={data.website.ogImage || data.profileSettings.avatarUrl}
+            tags={article.tags}
+            siteName={data.website.siteName}
+          />
+        </div>
 
         <div className="max-w-3xl pt-2">
           <AuthorProfileCard

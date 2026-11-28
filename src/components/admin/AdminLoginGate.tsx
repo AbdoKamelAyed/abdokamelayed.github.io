@@ -1,19 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { Eye, EyeOff, KeyRound, Lock, ShieldAlert, ShieldCheck, UserPlus } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
 import type { Lang } from "../../types/hub";
 import {
   evaluatePassphraseStrength,
   getLoginLockState,
   listAdminAccounts,
   registerAdminAccount,
-  resetAdminCredential,
   verifyAdminLogin,
-  type AdminAccountRecord,
-  type AdminRole,
   type AdminSessionRecord,
 } from "../../utils/adminAuth";
 import { L } from "../../utils/i18n";
-import { AuthorAvatar, DEFAULT_AUTHOR_AVATAR } from "../AuthorProfileCard";
+import { DEFAULT_AUTHOR_AVATAR } from "../AuthorProfileCard";
 
 export const AdminLoginGate: React.FC<{
   lang: Lang;
@@ -21,18 +18,13 @@ export const AdminLoginGate: React.FC<{
   defaultAvatarUrl?: string;
   onAuthenticated: (session: AdminSessionRecord) => void;
 }> = ({ lang, defaultUsername, defaultAvatarUrl, onAuthenticated }) => {
-  const [accounts, setAccounts] = useState<AdminAccountRecord[]>(() => listAdminAccounts());
-  const [mode, setMode] = useState<"signin" | "create">(() =>
-    listAdminAccounts().length > 0 ? "signin" : "create"
-  );
+  const [hasAccounts, setHasAccounts] = useState<boolean>(() => listAdminAccounts().length > 0);
+  const isInitialSetup = !hasAccounts;
 
-  const [username, setUsername] = useState(
-    () => listAdminAccounts()[0]?.username || defaultUsername || "AbdoKamelAyed"
+  const [username, setUsername] = useState(() =>
+    isInitialSetup ? defaultUsername || "AbdoKamelAyed" : ""
   );
   const [displayName, setDisplayName] = useState(defaultUsername || "Abdo Kamel");
-  const [role, setRole] = useState<AdminRole>(() =>
-    listAdminAccounts().length === 0 ? "Owner" : "Managing Editor"
-  );
   const [avatarUrl, setAvatarUrl] = useState(defaultAvatarUrl || DEFAULT_AUTHOR_AVATAR);
   const [passphrase, setPassphrase] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
@@ -40,7 +32,6 @@ export const AdminLoginGate: React.FC<{
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [confirmReset, setConfirmReset] = useState(false);
   const [lockSeconds, setLockSeconds] = useState<number>(() => getLoginLockState().remainingSeconds);
 
   useEffect(() => {
@@ -63,7 +54,7 @@ export const AdminLoginGate: React.FC<{
       return;
     }
 
-    if (mode === "create") {
+    if (isInitialSetup) {
       if (!strength.valid) {
         setError(
           L(
@@ -85,21 +76,21 @@ export const AdminLoginGate: React.FC<{
 
     setSubmitting(true);
     try {
-      if (mode === "create") {
+      if (isInitialSetup) {
         const res = await registerAdminAccount({
           username,
           displayName: displayName.trim() || username.trim(),
           passphrase,
-          role,
+          role: "Owner",
           avatarUrl,
           durationHours,
         });
         if (!res.ok || !res.session) {
-          setError(res.error || L("Could not create admin account.", "تعذر إنشاء حساب المسؤول.", lang));
+          setError(res.error || L("Could not initialize owner account.", "تعذر إعداد حساب المالك.", lang));
           setSubmitting(false);
           return;
         }
-        setAccounts(listAdminAccounts());
+        setHasAccounts(true);
         onAuthenticated(res.session);
       } else {
         const res = await verifyAdminLogin(username, passphrase, durationHours);
@@ -113,8 +104,8 @@ export const AdminLoginGate: React.FC<{
                   lang
                 )
               : res.attemptsLeft !== undefined
-              ? `${L("Invalid username or passphrase.", "اسم المستخدم أو كلمة المرور غير صحيحة.", lang)} (${res.attemptsLeft} ${L("attempts left", "محاولات متبقية", lang)})`
-              : L("Invalid username or passphrase.", "اسم المستخدم أو كلمة المرور غير صحيحة.", lang)
+              ? `${L("Invalid credentials.", "بيانات الدخول غير صحيحة.", lang)} (${res.attemptsLeft} ${L("attempts left", "محاولات متبقية", lang)})`
+              : L("Invalid credentials.", "بيانات الدخول غير صحيحة.", lang)
           );
           setSubmitting(false);
           return;
@@ -130,94 +121,38 @@ export const AdminLoginGate: React.FC<{
 
   return (
     <div className="min-h-[72vh] flex items-center justify-center py-10">
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--hub-border)] hub-surface p-7 sm:p-8 space-y-6 shadow-sm">
+      <div
+        data-testid="private-admin-gate"
+        className="w-full max-w-lg rounded-2xl border border-[var(--hub-border)] hub-surface p-7 sm:p-8 space-y-6 shadow-sm"
+      >
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-blue-600 dark:text-blue-400">
-            <ShieldCheck className="w-4 h-4" />
-            <span>{L("Restricted Admin Portal · PBKDF2-SHA-256", "بوابة الإدارة المحمية · PBKDF2", lang)}</span>
+          <div className="inline-flex items-center gap-2 text-xs font-mono text-blue-600 dark:text-blue-400">
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span>
+              {isInitialSetup
+                ? L("Private Workspace · Initial Owner Setup", "مساحة خاصة · إعداد المالك الأول", lang)
+                : L("Private Workspace · Authorized Access Only", "مساحة إدارة خاصة · للمصرح لهم فقط", lang)}
+            </span>
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight">
-            {mode === "signin"
-              ? L("Administrator Sign In", "تسجيل دخول المسؤول", lang)
-              : L("Create Admin Account", "إنشاء حساب مسؤول جديد", lang)}
+            {isInitialSetup
+              ? L("Initialize Workspace Owner", "تهيئة مالك مساحة الإدارة", lang)
+              : L("Private Administrator Sign In", "دخول مساحة الإدارة الخاصة", lang)}
           </h1>
-          <p className="text-sm text-[var(--hub-text-muted)]">
-            {mode === "signin"
+          <p className="text-sm text-[var(--hub-text-muted)] leading-relaxed">
+            {isInitialSetup
               ? L(
-                  "Sign in with your registered local admin account. Sessions auto-lock on browser close or inactivity.",
-                  "سجّل الدخول بحساب المسؤول المسجل. تُغلق الجلسات تلقائياً عند إغلاق المتصفح أو الخمول.",
+                  "No administrator exists in this browser yet. Create the primary Owner account once—public registration closes automatically afterward.",
+                  "لا يوجد حساب مالك مهيأ بعد. أنشئ حساب المالك الرئيسي لمرة واحدة فقط؛ يُغلق التسجيل العام تلقائياً بعد ذلك.",
                   lang
                 )
               : L(
-                  "Anyone holding this direct admin link can register an operator account protected with salted PBKDF2-SHA-256 derivation.",
-                  "يمكن لمن يملك رابط الإدارة المباشر إنشاء حساب مسؤول مشفر محلياً بخوارزمية PBKDF2-SHA-256.",
+                  "Public access and self-registration are disabled. Sign in with credentials provisioned by an Owner administrator.",
+                  "الوصول العام والتسجيل الذاتي معطلان. سجّل الدخول باستخدام بيانات حساب مصرح به من قِبل المالك.",
                   lang
                 )}
           </p>
         </div>
-
-        {/* Mode Switcher */}
-        <div className="grid grid-cols-2 gap-1 p-1 rounded-xl border border-[var(--hub-border)] hub-subtle">
-          <button
-            type="button"
-            onClick={() => {
-              setMode("signin");
-              setError("");
-            }}
-            disabled={accounts.length === 0}
-            className={`py-2 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-45 whitespace-nowrap ${
-              mode === "signin" ? "bg-[var(--hub-primary)] text-[var(--hub-bg)]" : "text-[var(--hub-text-muted)]"
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>{L("Sign In", "تسجيل الدخول", lang)} ({accounts.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("create");
-              setError("");
-              if (accounts.length > 0 && username === accounts[0].username) {
-                setUsername("");
-              }
-            }}
-            className={`py-2 px-3 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-              mode === "create" ? "bg-[var(--hub-primary)] text-[var(--hub-bg)]" : "text-[var(--hub-text-muted)]"
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>{L("Create Admin Account", "إنشاء حساب مسؤول", lang)}</span>
-          </button>
-        </div>
-
-        {mode === "signin" && accounts.length > 0 && (
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-semibold text-[var(--hub-text-muted)] block">
-              {L("Registered Operators on This Browser", "الحسابات المسجلة على هذا المتصفح", lang)}
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {accounts.map((acc) => {
-                const selected = acc.username.toLowerCase() === username.trim().toLowerCase();
-                return (
-                  <button
-                    key={acc.id}
-                    type="button"
-                    onClick={() => setUsername(acc.username)}
-                    className={`px-2.5 py-1.5 rounded-lg border text-xs inline-flex items-center gap-2 cursor-pointer ${
-                      selected
-                        ? "border-blue-600 bg-blue-600/10 text-blue-700 dark:text-blue-300 font-semibold"
-                        : "border-[var(--hub-border)] text-[var(--hub-text-muted)] hover:text-[var(--hub-text)]"
-                    }`}
-                  >
-                    <AuthorAvatar src={acc.avatarUrl} name={acc.displayName} sizeClass="w-5 h-5" />
-                    <span>@{acc.username}</span>
-                    <span className="text-[10px] opacity-75">· {acc.role}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {lockSeconds > 0 && (
           <div
@@ -241,10 +176,10 @@ export const AdminLoginGate: React.FC<{
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className={mode === "create" ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : "space-y-1.5"}>
+          <div className={isInitialSetup ? "grid grid-cols-1 sm:grid-cols-2 gap-3" : "space-y-1.5"}>
             <div className="space-y-1.5">
               <label htmlFor="admin-user" className="text-xs font-semibold text-[var(--hub-text-muted)] block">
-                {L("Admin Username", "اسم مستخدم المسؤول", lang)}
+                {L("Administrator Username", "اسم مستخدم المسؤول", lang)}
               </label>
               <input
                 id="admin-user"
@@ -253,15 +188,15 @@ export const AdminLoginGate: React.FC<{
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="operator-handle"
+                placeholder={L("Enter username", "أدخل اسم المستخدم", lang)}
                 className="w-full px-3.5 py-2.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm font-mono"
               />
             </div>
 
-            {mode === "create" && (
+            {isInitialSetup && (
               <div className="space-y-1.5">
                 <label htmlFor="admin-display-name" className="text-xs font-semibold text-[var(--hub-text-muted)] block">
-                  {L("Display Name", "الاسم الظاهر", lang)}
+                  {L("Owner Display Name", "اسم المالك الظاهر", lang)}
                 </label>
                 <input
                   id="admin-display-name"
@@ -275,27 +210,20 @@ export const AdminLoginGate: React.FC<{
             )}
           </div>
 
-          {mode === "create" && (
+          {isInitialSetup && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label htmlFor="admin-role" className="text-xs font-semibold text-[var(--hub-text-muted)] block">
-                  {L("Operator Role", "الدور الإداري", lang)}
-                </label>
-                <select
-                  id="admin-role"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as AdminRole)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-[var(--hub-border)] bg-[var(--hub-bg)] text-sm"
-                >
-                  <option value="Owner">{L("Owner (Full Hub Admin)", "مالك المنصة", lang)}</option>
-                  <option value="Managing Editor">{L("Managing Editor", "رئيس تحرير", lang)}</option>
-                  <option value="Author">{L("Author & Publisher", "كاتب وناشر", lang)}</option>
-                </select>
+                <span className="text-xs font-semibold text-[var(--hub-text-muted)] block">
+                  {L("Assigned Role", "الدور المعين", lang)}
+                </span>
+                <div className="px-3.5 py-2.5 rounded-lg border border-[var(--hub-border)] hub-subtle text-sm font-mono">
+                  Owner
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <label htmlFor="admin-avatar-url" className="text-xs font-semibold text-[var(--hub-text-muted)] block">
-                  {L("Author Avatar URL", "رابط صورة الحساب", lang)}
+                  {L("Owner Avatar URL", "رابط صورة المالك", lang)}
                 </label>
                 <input
                   id="admin-avatar-url"
@@ -317,7 +245,7 @@ export const AdminLoginGate: React.FC<{
               <input
                 id="admin-pass"
                 type={showPass ? "text" : "password"}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete={isInitialSetup ? "new-password" : "current-password"}
                 required
                 value={passphrase}
                 onChange={(e) => setPassphrase(e.target.value)}
@@ -334,7 +262,7 @@ export const AdminLoginGate: React.FC<{
               </button>
             </div>
 
-            {mode === "create" && passphrase.length > 0 && (
+            {isInitialSetup && passphrase.length > 0 && (
               <div className="space-y-1 pt-1">
                 <div className="grid grid-cols-4 gap-1">
                   {[1, 2, 3, 4].map((step) => (
@@ -358,7 +286,7 @@ export const AdminLoginGate: React.FC<{
             )}
           </div>
 
-          {mode === "create" && (
+          {isInitialSetup && (
             <div className="space-y-1.5">
               <label htmlFor="admin-pass-confirm" className="text-xs font-semibold text-[var(--hub-text-muted)] block">
                 {L("Confirm Passphrase", "تأكيد كلمة المرور", lang)}
@@ -394,67 +322,19 @@ export const AdminLoginGate: React.FC<{
 
           <button
             type="submit"
-            disabled={submitting || (mode === "signin" && lockSeconds > 0)}
+            disabled={submitting || (!isInitialSetup && lockSeconds > 0)}
             className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-[var(--hub-primary)] text-[var(--hub-bg)] text-sm font-semibold hover:opacity-90 disabled:opacity-55 cursor-pointer"
           >
-            {mode === "signin" ? <Lock className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />}
+            {isInitialSetup ? <KeyRound className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
             <span>
               {submitting
                 ? L("Deriving PBKDF2 key...", "جارٍ التحقق المشفر...", lang)
-                : mode === "signin"
-                ? L("Unlock Admin Workspace", "دخول مساحة الإدارة", lang)
-                : L("Create Admin Account & Enter", "إنشاء الحساب والدخول", lang)}
+                : isInitialSetup
+                ? L("Initialize Owner & Enter Workspace", "تهيئة المالك ودخول الإدارة", lang)
+                : L("Unlock Private Workspace", "فتح مساحة الإدارة الخاصة", lang)}
             </span>
           </button>
         </form>
-
-        {accounts.length > 0 && (
-          <div className="pt-4 border-t border-[var(--hub-border)] text-xs text-[var(--hub-text-muted)] flex items-center justify-between gap-3">
-            {!confirmReset ? (
-              <>
-                <span>{L("Locked out locally?", "نسيت بيانات الدخول المحلية؟", lang)}</span>
-                <button
-                  type="button"
-                  onClick={() => setConfirmReset(true)}
-                  className="text-red-600 dark:text-red-400 hover:underline font-medium cursor-pointer"
-                >
-                  {L("Reset Local Accounts", "مسح الحسابات المحلية", lang)}
-                </button>
-              </>
-            ) : (
-              <div className="w-full flex items-center justify-between gap-2">
-                <span className="text-red-600 dark:text-red-400">
-                  {L("Clear all local admin credentials?", "تأكيد مسح حسابات المتصفح؟", lang)}
-                </span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetAdminCredential();
-                      setAccounts([]);
-                      setMode("create");
-                      setLockSeconds(0);
-                      setPassphrase("");
-                      setConfirmPass("");
-                      setError("");
-                      setConfirmReset(false);
-                    }}
-                    className="px-2.5 py-1 rounded bg-red-600 text-white font-semibold cursor-pointer"
-                  >
-                    {L("Confirm", "تأكيد", lang)}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmReset(false)}
-                    className="px-2.5 py-1 rounded border border-[var(--hub-border)] cursor-pointer"
-                  >
-                    {L("Cancel", "إلغاء", lang)}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

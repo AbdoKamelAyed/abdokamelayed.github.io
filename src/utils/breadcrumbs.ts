@@ -1,8 +1,11 @@
 import type { HubDatasets, Lang } from "../types/hub";
 import { L, loc, t } from "./i18n";
 
+import { getAdminModuleLabel, isAdminWorkspaceSection } from "./adminPermissions";
+
 export type HubRouteSection =
   | "home"
+  | "now"
   | "projects"
   | "github"
   | "work"
@@ -10,7 +13,8 @@ export type HubRouteSection =
   | "knowledge"
   | "about"
   | "contact"
-  | "admin";
+  | "admin"
+  | "not-found";
 
 export interface HubRoute {
   section: HubRouteSection;
@@ -123,6 +127,15 @@ export function buildBreadcrumbs(
       });
       break;
 
+    case "now":
+      items.push({
+        id: "now",
+        label: t("nav.now", lang),
+        href: "#/now",
+        current: true,
+      });
+      break;
+
     case "work":
       items.push({
         id: "work",
@@ -162,8 +175,25 @@ export function buildBreadcrumbs(
     case "admin":
       items.push({
         id: "admin",
-        label: t("nav.admin", lang),
+        label: L("Admin Workspace", "مساحة الإدارة", lang),
         href: "#/admin",
+        current: !param || param === "overview",
+      });
+      if (param && param !== "overview" && isAdminWorkspaceSection(param)) {
+        items.push({
+          id: `admin-${param}`,
+          label: getAdminModuleLabel(param, lang),
+          href: `#/admin/${param}`,
+          current: true,
+        });
+      }
+      break;
+
+    case "not-found":
+      items.push({
+        id: "not-found",
+        label: L("Not Found", "غير موجود", lang),
+        href: "#/",
         current: true,
       });
       break;

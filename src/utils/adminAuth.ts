@@ -1,10 +1,17 @@
-export type AdminRole = "Owner" | "Managing Editor" | "Author";
+import {
+  resolveEffectiveModules,
+  type AdminRole,
+  type AdminWorkspaceSection,
+} from "./adminPermissions";
+
+export type { AdminRole, AdminWorkspaceSection };
 
 export interface AdminAccountRecord {
   id: string;
   username: string;
   displayName: string;
   role: AdminRole;
+  allowedModules?: AdminWorkspaceSection[];
   avatarUrl?: string;
   bio?: string;
   salt: string;
@@ -29,6 +36,7 @@ export interface AdminSessionRecord {
   username: string;
   displayName: string;
   role: AdminRole;
+  allowedModules: AdminWorkspaceSection[];
   avatarUrl?: string;
   sessionToken: string;
   loggedInAt: string;
@@ -289,15 +297,21 @@ function clearLoginAttempts(): void {
   safeRemove(memLocalStore(), ATTEMPTS_KEY);
 }
 
+export function isAdminWorkspaceInitialized(): boolean {
+  return listAdminAccounts().length > 0;
+}
+
 export async function registerAdminAccount(opts: {
   username: string;
   displayName?: string;
   passphrase: string;
   role?: AdminRole;
+  allowedModules?: AdminWorkspaceSection[];
   avatarUrl?: string;
   bio?: string;
   durationHours?: number;
   overwriteExisting?: boolean;
+  authorizedByOwner?: boolean;
 }): Promise<{ ok: boolean; session?: AdminSessionRecord; account?: AdminAccountRecord; error?: string }> {
   const cleanUser = opts.username.trim();
   if (!cleanUser || cleanUser.length < 2) {
@@ -309,6 +323,13 @@ export async function registerAdminAccount(opts: {
   }
 
   const accounts = listAdminAccounts();
+  if (accounts.length > 0 && !opts.authorizedByOwner && !opts.overwriteExisting) {
+    return {
+      ok: false,
+      error: "Public administrator registration is disabled. Sign in as an Owner to grant access.",
+    };
+  }
+
   const existingIdx = accounts.findIndex(
     (a) => a.username.toLowerCase() === cleanUser.toLowerCase()
   );
@@ -319,6 +340,12 @@ export async function registerAdminAccount(opts: {
   const salt = generateSaltHex(16);
   const hash = await hashPassphrasePbkdf2(opts.passphrase, salt, PBKDF2_ITERATIONS);
   const nowIso = new Date().toISOString();
+  const assignedRole: AdminRole =
+    accounts.length === 0 ? "Owner" : opts.role || "Managing Editor";
+  const effectiveModules = resolveEffectiveModules({
+    role: assignedRole,
+    allowedModules: opts.allowedModules,
+  });
 
   const nextAccount: AdminAccountRecord = {
     id:
@@ -327,7 +354,8 @@ export async function registerAdminAccount(opts: {
         : `admin-${cleanUser.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${generateSaltHex(3)}`,
     username: cleanUser,
     displayName: opts.displayName?.trim() || cleanUser,
-    role: opts.role || (accounts.length === 0 ? "Owner" : "Managing Editor"),
+    role: assignedRole,
+    allowedModules: effectiveModules,
     avatarUrl: opts.avatarUrl?.trim() || undefined,
     bio: opts.bio?.trim() || undefined,
     salt,
@@ -456,7 +484,7 @@ export async function verifyAdminLogin(
 }
 
 export function createAdminSession(
-  account: Pick<AdminAccountRecord, "id" | "username" | "displayName" | "role" | "avatarUrl"> | string,
+  account: Pick<AdminAccountRecord, "id" | "username" | "displayName" | "role" | "allowedModules" | "avatarUrl"> | string,
   durationHours = 8,
   inactivityLimitMinutes = 45
 ): AdminSessionRecord {
@@ -466,12 +494,18 @@ export function createAdminSession(
     typeof account === "string"
       ? { id: `admin-${account}`, username: account, displayName: account, role: "Owner" as AdminRole }
       : account;
+  const resolvedRole = accObj.role || "Managing Editor";
+  const resolvedModules = resolveEffectiveModules({
+    role: resolvedRole,
+    allowedModules: accObj.allowedModules,
+  });
 
   const session: AdminSessionRecord = {
     accountId: accObj.id,
     username: accObj.username,
     displayName: accObj.displayName || accObj.username,
-    role: accObj.role || "Managing Editor",
+    role: resolvedRole,
+    allowedModules: resolvedModules,
     avatarUrl: accObj.avatarUrl,
     sessionToken: generateSaltHex(24),
     loggedInAt: new Date(now).toISOString(),
@@ -523,8 +557,73 @@ export function clearAdminSession(): void {
   safeRemove(memLocalStore(), "abdo_hub_admin_session_v1");
 }
 
+export function updateAdminAccountAccess(
+  accountId: string,
+  patch: {
+    displayName?: string;
+    role?: AdminRole;
+    allowedModules?: AdminWorkspaceSection[];
+    bio?: string;
+  }
+): { ok: boolean; accounts: AdminAccountRecord[]; updatedAccount?: AdminAccountRecord; error?: string } {
+  const accounts = listAdminAccounts();
+  const target = accounts.find((a) => a.id === accountId);
+  if (!target) {
+    return { ok: false, accounts, error: "Administrator account not found." };
+  }
+
+  const nextRole = patch.role ?? target.role;
+  const ownerCount = accounts.filter((a) => a.role === "Owner").length;
+  if (target.role === "Owner" && nextRole !== "Owner" && ownerCount <= 1) {
+    return {
+      ok: false,
+      accounts,
+      error: "At least one Owner account must remain active.",
+    };
+  }
+
+  const nextModules = resolveEffectiveModules({
+    role: nextRole,
+    allowedModules: patch.allowedModules ?? target.allowedModules,
+  });
+
+  const updatedAccount: AdminAccountRecord = {
+    ...target,
+    displayName: patch.displayName?.trim() || target.displayName,
+    role: nextRole,
+    allowedModules: nextModules,
+    bio: patch.bio !== undefined ? patch.bio.trim() || undefined : target.bio,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const nextAccounts = accounts.map((a) => (a.id === accountId ? updatedAccount : a));
+  saveAdminAccounts(nextAccounts);
+
+  const active = getActiveAdminSession();
+  if (active && active.accountId === updatedAccount.id) {
+    const syncedSession: AdminSessionRecord = {
+      ...active,
+      displayName: updatedAccount.displayName,
+      role: updatedAccount.role,
+      allowedModules: nextModules,
+      lastActivityAt: new Date().toISOString(),
+    };
+    safeSet(memSessionStore(), SESSION_KEY, JSON.stringify(syncedSession));
+  }
+
+  return { ok: true, accounts: nextAccounts, updatedAccount };
+}
+
 export function removeAdminAccount(accountId: string): AdminAccountRecord[] {
-  const next = listAdminAccounts().filter((a) => a.id !== accountId);
+  const accounts = listAdminAccounts();
+  const target = accounts.find((a) => a.id === accountId);
+  if (target && target.role === "Owner") {
+    const ownerCount = accounts.filter((a) => a.role === "Owner").length;
+    if (ownerCount <= 1) {
+      return accounts;
+    }
+  }
+  const next = accounts.filter((a) => a.id !== accountId);
   saveAdminAccounts(next);
   return next;
 }

@@ -22,7 +22,15 @@ import {
   evaluatePassphraseStrength,
   hashPassphrase,
   hashPassphrasePbkdf2,
+  registerAdminAccount,
+  resetAdminCredential,
 } from "./adminAuth";
+import {
+  canAccessAdminModule,
+  getDefaultModulesForRole,
+  resolveEffectiveModules,
+} from "./adminPermissions";
+import { buildAdminRouteHref, parseAppRoute, toLegacyRoute } from "./router";
 import {
   calculateIssueStats,
   getIsoWeekKey,
@@ -30,7 +38,7 @@ import {
   selectArticlesForIssue,
 } from "./issues";
 import { generatePdfBytes } from "./pdfMaker";
-import { analyzeSeoAudit, generateRobotsTxt, generateSitemapXml } from "./seoEngine";
+import { analyzeSeoAudit, applyPageSeoMetadata, generateRobotsTxt, generateSitemapXml } from "./seoEngine";
 import { extractTableOfContents, parseMarkdownBlocks, tokenizeInlineMarkdown } from "./markdown";
 import {
   DEFAULT_DESIGN_THEME_ID,
@@ -39,6 +47,7 @@ import {
   getPairedPolarityThemeId,
 } from "./designThemes";
 import {
+  applyArticleFontScale,
   canStepFontScale,
   DEFAULT_FONT_SCALE,
   FONT_SCALES,
@@ -51,13 +60,58 @@ import {
 import { buildBreadcrumbs } from "./breadcrumbs";
 import { resolveSkeletonVariant } from "./skeletons";
 import { normalizeCodeLanguage, tokenizeCode, tokenizeCodeLine } from "./codeHighlight";
-import { computeAdminChartMetrics } from "./adminAnalytics";
 import {
+  computeAdminChartMetrics,
+  computePositionSectionMetrics,
+  computeRoleDashboardMetrics,
+} from "./adminAnalytics";
+import {
+  base64ToUtf8,
   buildGitHubRawUrl,
+  resolveGitHubSyncTargetFromSettings,
   sanitizeRepoStoragePath,
+  splitRepoPath,
+  uploadFileToGitHubRepo,
+  utf8ToBase64,
   validateGitHubRepoTarget,
 } from "../services/githubStorageService";
-import type { ArticleRecord, GitHubContributions, GitHubRepo, HubDatasets, ProjectRecord } from "../types/hub";
+import { mapDatasetPathToRepoPath } from "../services/dataService";
+import {
+  buildDriveMultipartBody,
+  formatDriveFilesQuery,
+  mapDriveFileToMediaAsset,
+} from "./googleDriveHelpers";
+import {
+  createInitialNetworkState,
+  getNetworkNoticeCopy,
+  reduceNetworkStatus,
+} from "./networkStatus";
+import {
+  buildJournalPrintCoverMeta,
+  buildKnowledgeArchiveCoverMeta,
+  buildKnowledgePrintCoverMeta,
+  formatReadingTimeLabel,
+} from "./printMetadata";
+import {
+  buildGitHubHeatmapModel,
+  computeIntensityThresholds,
+  quantizeActivityLevel,
+} from "./githubHeatmap";
+import {
+  createEmptyVisitStore,
+  exportVisitsCsv,
+  getAdminVisitAnalytics,
+  getArticleViewCount,
+  getPublicVisitInsights,
+  recordVisitEvent,
+} from "./visitInsights";
+import {
+  buildSocialShareLinks,
+  resolveAbsoluteShareUrl,
+  resolveLinkPreviewImage,
+} from "./socialShare";
+import { buildWorkingNowItems } from "./workingNow";
+import type { ArticleRecord, GitHubActivity, GitHubCommit, GitHubContributions, GitHubRepo, HubDatasets, KnowledgeEntry, ProjectRecord } from "../types/hub";
 
 test("safeUrl allows safe schemes and blocks javascript/data URIs", () => {
   assert.equal(safeUrl("https://github.com/AbdoKamelAyed"), "https://github.com/AbdoKamelAyed");
@@ -832,8 +886,959 @@ test("GitHub storage path sanitizer and repo validator reject traversal and buil
   );
 });
 
+test("networkStatus state machine transitions cleanly across offline, dismiss, online, and auto-clear", () => {
+  const initialOnline = createInitialNetworkState(true);
+  assert.deepEqual(initialOnline, { isOnline: true, notice: "none", dismissed: false });
 
+  // Staying online when already online does not show a reconnected banner
+  const stillOnline = reduceNetworkStatus(initialOnline, "online");
+  assert.equal(stillOnline.notice, "none");
 
+  // Going offline shows offline banner even if previously dismissed
+  const wentOffline = reduceNetworkStatus(initialOnline, "offline");
+  assert.deepEqual(wentOffline, { isOnline: false, notice: "offline", dismissed: false });
+
+  const dismissedOffline = reduceNetworkStatus(wentOffline, "dismiss");
+  assert.equal(dismissedOffline.dismissed, true);
+
+  // Going offline again resets dismissed flag
+  const offlineAgain = reduceNetworkStatus(dismissedOffline, "offline");
+  assert.equal(offlineAgain.dismissed, false);
+
+  // Coming back online from offline surfaces reconnected notice until auto-cleared
+  const reconnected = reduceNetworkStatus(dismissedOffline, "online");
+  assert.deepEqual(reconnected, { isOnline: true, notice: "reconnected", dismissed: false });
+
+  // Duplicate browser "online" event does not prematurely clear reconnected banner
+  const reconnectedTwice = reduceNetworkStatus(reconnected, "online");
+  assert.deepEqual(reconnectedTwice, { isOnline: true, notice: "reconnected", dismissed: false });
+
+  const cleared = reduceNetworkStatus(reconnectedTwice, "auto-clear");
+  assert.deepEqual(cleared, { isOnline: true, notice: "none", dismissed: false });
+
+  assert.equal(getNetworkNoticeCopy("offline", "en")?.title, "Connection lost");
+  assert.equal(getNetworkNoticeCopy("reconnected", "ar")?.title, "تمت استعادة الاتصال");
+  assert.equal(getNetworkNoticeCopy("none", "en"), null);
+});
+
+test("printMetadata builders format Journal and Knowledge cover page title, date, and reading time", () => {
+  const sampleArticle = {
+    id: "art-1",
+    slug: "test-article",
+    type: "articles",
+    title: { en: "Print Architecture", ar: "معمارية الطباعة" },
+    subtitle: { en: "Clean stylesheets", ar: "أنماط نظيفة" },
+    content: { en: "word ".repeat(450), ar: "كلمة ".repeat(250) },
+    publishedAt: "2026-11-26",
+    categories: ["articles"],
+    tags: ["css", "print"],
+    readingTimeMinutes: 3,
+    featured: true,
+    createdAt: "2026-11-26",
+    updatedAt: "2026-11-26",
+    status: "published",
+    source: "manual",
+  } as ArticleRecord;
+
+  const journalCover = buildJournalPrintCoverMeta({
+    article: sampleArticle,
+    siteName: "ABDO Hub",
+    authorName: "Abdo Kamel",
+    authorHandle: "@AbdoKamelAyed",
+    formattedDate: "Nov 26, 2026",
+    summaryText: "A concise abstract.",
+    lang: "en",
+  });
+  assert.equal(journalCover.title, "Print Architecture");
+  assert.equal(journalCover.dateLabel, "Nov 26, 2026");
+  assert.equal(journalCover.readingTimeMinutes, 3);
+  assert.equal(journalCover.readingTimeLabel, "3 min read");
+  assert.equal(journalCover.authorLabel, "Abdo Kamel (@AbdoKamelAyed)");
+
+  const sampleKnowledge = {
+    id: "know-1",
+    title: { en: "Zero-Allocation Parsers", ar: "محللات بدون تخصيص" },
+    summary: { en: "word ".repeat(220), ar: "ملخص ".repeat(220) },
+    category: "systems",
+    entryType: "verified-reference",
+    tags: ["performance"],
+    sourceAttribution: "Engineering Notes",
+    createdAt: "2026-11-20",
+    updatedAt: "2026-11-25",
+    status: "published",
+    source: "manual",
+  } as KnowledgeEntry;
+
+  const knowledgeCover = buildKnowledgePrintCoverMeta({
+    entry: sampleKnowledge,
+    siteName: "ABDO Hub",
+    formattedDate: "Nov 25, 2026",
+    lang: "en",
+  });
+  assert.equal(knowledgeCover.title, "Zero-Allocation Parsers");
+  assert.equal(knowledgeCover.dateLabel, "Nov 25, 2026");
+  assert.equal(knowledgeCover.readingTimeMinutes, 2);
+  assert.equal(knowledgeCover.readingTimeLabel, "2 min read");
+
+  const archiveCover = buildKnowledgeArchiveCoverMeta({
+    entries: [sampleKnowledge],
+    siteName: "ABDO Hub",
+    formattedDate: "Nov 26, 2026",
+    lang: "ar",
+  });
+  assert.equal(archiveCover.readingTimeMinutes, 2);
+  assert.equal(formatReadingTimeLabel(2, "ar"), "2 دقيقة قراءة");
+});
+
+test("Google Drive multipart builder, query escaping, and MediaAssetRecord mapper work reliably", () => {
+  assert.equal(formatDriveFilesQuery(), "trashed = false");
+  assert.equal(formatDriveFilesQuery("abdo's file"), "trashed = false and name contains 'abdo\\'s file'");
+
+  const bytes = new TextEncoder().encode("hello-drive");
+  const { bodyBytes, contentTypeHeader } = buildDriveMultipartBody({
+    fileName: "report.pdf",
+    mimeType: "application/pdf",
+    fileBytes: bytes,
+    boundary: "test_boundary",
+  });
+  assert.equal(contentTypeHeader, "multipart/related; boundary=test_boundary");
+  const textBody = new TextDecoder().decode(bodyBytes);
+  assert.equal(textBody.includes('"name":"report.pdf"'), true);
+  assert.equal(textBody.includes("hello-drive"), true);
+
+  const asset = mapDriveFileToMediaAsset({
+    driveFile: {
+      id: "drv123456",
+      name: "diagram.png",
+      mimeType: "image/png",
+      size: "4096",
+      webViewLink: "https://drive.google.com/file/d/drv123456/view",
+      modifiedTime: "2026-11-28T00:00:00Z",
+    },
+    captionOverride: "System chart",
+  });
+  assert.equal(asset.mediaType, "image");
+  assert.equal(asset.source, "google-drive");
+  assert.equal(asset.url, "https://drive.google.com/file/d/drv123456/view");
+  assert.equal(asset.sizeBytes, 4096);
+});
+
+test("GitHub dataset path mapping, splitRepoPath, and UTF-8 base64 round-trip cleanly", () => {
+  assert.equal(mapDatasetPathToRepoPath("./data/projects/projects.json"), "public/data/projects/projects.json");
+  assert.equal(mapDatasetPathToRepoPath("public/data/settings/website.json"), "public/data/settings/website.json");
+  assert.deepEqual(splitRepoPath("public/data/projects/projects.json"), {
+    folder: "public/data/projects",
+    fileName: "projects.json",
+  });
+
+  const sampleJson = JSON.stringify({ title: "منصة عبدو — ABDO Hub" });
+  assert.equal(base64ToUtf8(utf8ToBase64(sampleJson)), sampleJson);
+});
+
+test("Central router parses public, nested, admin workspace, and not-found routes cleanly", () => {
+  assert.deepEqual(parseAppRoute(""), { kind: "home", path: "#/" });
+  assert.deepEqual(parseAppRoute("#/projects/abdo%20hub"), {
+    kind: "project-detail",
+    slugOrId: "abdo hub",
+    path: "#/projects/abdo%20hub",
+  });
+  assert.deepEqual(parseAppRoute("#/journal/issues/issue-01"), {
+    kind: "issue-detail",
+    slugOrId: "issue-01",
+    path: "#/journal/issues/issue-01",
+  });
+  assert.deepEqual(parseAppRoute("#/admin"), {
+    kind: "admin",
+    adminSection: "overview",
+    path: "#/admin",
+  });
+  assert.deepEqual(parseAppRoute("#/admin/access"), {
+    kind: "admin",
+    adminSection: "access",
+    path: "#/admin/access",
+  });
+  assert.equal(buildAdminRouteHref("github"), "#/admin/github");
+  assert.equal(buildAdminRouteHref("overview"), "#/admin");
+
+  const unknownTop = parseAppRoute("#/unknown-section");
+  assert.equal(unknownTop.kind, "not-found");
+  assert.equal(toLegacyRoute(unknownTop).section, "not-found");
+
+  const unknownAdmin = parseAppRoute("#/admin/bogus");
+  assert.equal(unknownAdmin.kind, "admin");
+  if (unknownAdmin.kind === "admin") {
+    assert.equal(unknownAdmin.adminSection, "overview");
+    assert.equal(unknownAdmin.invalidSubSection, "bogus");
+  }
+});
+
+test("Admin workspace permissions enforce Owner-only modules and custom per-administrator overrides", () => {
+  const ownerMods = getDefaultModulesForRole("Owner");
+  assert.equal(ownerMods.includes("access"), true);
+  assert.equal(ownerMods.includes("settings"), true);
+
+  const authorMods = getDefaultModulesForRole("Author");
+  assert.deepEqual(authorMods, ["overview", "editor", "media", "knowledge"]);
+  assert.equal(canAccessAdminModule({ role: "Author" }, "access"), false);
+  assert.equal(canAccessAdminModule({ role: "Author" }, "settings"), false);
+  assert.equal(canAccessAdminModule({ role: "Author" }, "editor"), true);
+
+  // Custom override grants an Author access to Projects, while ownerOnly "access" stays blocked
+  const customAuthor = {
+    role: "Author" as const,
+    allowedModules: ["editor" as const, "projects" as const, "access" as const],
+  };
+  const resolved = resolveEffectiveModules(customAuthor);
+  assert.equal(resolved.includes("overview"), true);
+  assert.equal(resolved.includes("projects"), true);
+  assert.equal(resolved.includes("access"), false);
+  assert.equal(canAccessAdminModule(customAuthor, "projects"), true);
+  assert.equal(canAccessAdminModule(customAuthor, "access"), false);
+});
+
+test("registerAdminAccount disables public registration after Owner bootstrap unless authorizedByOwner is set", async () => {
+  const mem = new Map<string, string>();
+  const origLocal = (globalThis as Record<string, unknown>).localStorage;
+  const origSession = (globalThis as Record<string, unknown>).sessionStorage;
+  const makeStore = () => ({
+    getItem: (k: string) => (mem.has(k) ? mem.get(k)! : null),
+    setItem: (k: string, v: string) => {
+      mem.set(k, v);
+    },
+    removeItem: (k: string) => {
+      mem.delete(k);
+    },
+  });
+  (globalThis as Record<string, unknown>).localStorage = makeStore();
+  (globalThis as Record<string, unknown>).sessionStorage = makeStore();
+
+  try {
+    resetAdminCredential();
+    // First-time setup always provisions an Owner even if another role is passed
+    const ownerRes = await registerAdminAccount({
+      username: "root.owner",
+      passphrase: "OwnerPass#2026",
+      role: "Author",
+    });
+    assert.equal(ownerRes.ok, true);
+    assert.equal(ownerRes.account?.role, "Owner");
+
+    // Subsequent unauthenticated registration without authorizedByOwner is blocked
+    const publicAttempt = await registerAdminAccount({
+      username: "stranger",
+      passphrase: "StrangerPass#2026",
+      role: "Owner",
+    });
+    assert.equal(publicAttempt.ok, false);
+    assert.equal(Boolean(publicAttempt.error?.includes("Public administrator registration is disabled")), true);
+
+    // Owner-authorized provisioning succeeds
+    const ownerGranted = await registerAdminAccount({
+      username: "jane.author",
+      passphrase: "AuthorPass#2026",
+      role: "Author",
+      authorizedByOwner: true,
+    });
+    assert.equal(ownerGranted.ok, true);
+    assert.equal(ownerGranted.account?.role, "Author");
+  } finally {
+    (globalThis as Record<string, unknown>).localStorage = origLocal;
+    (globalThis as Record<string, unknown>).sessionStorage = origSession;
+  }
+});
+
+test("computeRoleDashboardMetrics and computePositionSectionMetrics produce tailored metrics for every position", () => {
+  const sample = {
+    website: {
+      id: "w",
+      siteName: "ABDO Hub",
+      shortTitle: "ABDO",
+      domain: "https://abdokamelayed.github.io",
+      defaultLanguage: "en",
+      supportedLanguages: ["en", "ar"],
+      defaultTheme: "light",
+      defaultGlassMode: false,
+      primaryAccent: "#0f172a",
+      secondaryAccent: "#2563eb",
+      seoDescription: { en: "Detailed engineering hub description for verification testing.", ar: "وصف كامل باللغة العربية لاختبار التحقق." },
+      ogImage: "/img.jpg",
+      createdAt: "",
+      updatedAt: "2026-11-28",
+      status: "active",
+      source: "test",
+      version: "1.0.0",
+    },
+    profileSettings: {
+      id: "p",
+      fullName: { en: "Abdo Kamel", ar: "عبدو كامل" },
+      githubUsername: "AbdoKamelAyed",
+      avatarUrl: "/avatar.jpg",
+      headline: { en: "Engineer", ar: "مهندس" },
+      shortBio: { en: "Bio", ar: "نبذة" },
+      mission: { en: "", ar: "" },
+      careerDirection: { en: "", ar: "" },
+      technicalInterests: [],
+      selectedAchievements: [],
+      contact: { email: "a@example.com", github: "", linkedin: "", website: "", otherLinks: [] },
+      createdAt: "",
+      updatedAt: "2026-11-28",
+      status: "active",
+      source: "test",
+    },
+    allArticlesRaw: [
+      {
+        id: "a1",
+        slug: "a1",
+        type: "articles",
+        title: { en: "Systems Guide", ar: "دليل الأنظمة" },
+        subtitle: { en: "", ar: "" },
+        content: { en: "word ".repeat(300), ar: "كلمة ".repeat(200) },
+        publishedAt: "2026-11-20",
+        categories: ["articles"],
+        tags: ["architecture", "systems"],
+        readingTimeMinutes: 2,
+        featured: true,
+        createdAt: "2026-11-20",
+        updatedAt: "2026-11-20",
+        status: "published",
+        source: "manual",
+      },
+    ],
+    articles: [],
+    projects: [
+      {
+        id: "p1",
+        slug: "p1",
+        name: { en: "Hub", ar: "منصة" },
+        shortDescription: { en: "App", ar: "تطبيق" },
+        fullDescription: { en: "", ar: "" },
+        category: "web-applications",
+        status: "Active",
+        featured: true,
+        sortOrder: 1,
+        techStack: ["TypeScript", "React"],
+        createdAt: "2026-11-01",
+        updatedAt: "2026-11-10",
+        source: "manual",
+      },
+    ],
+    allIssuesRaw: [
+      {
+        id: "i1",
+        slug: "iss-1",
+        issueNumber: "ED. 01",
+        title: { en: "Nov Issue", ar: "عدد نوفمبر" },
+        subtitle: { en: "", ar: "" },
+        cadence: "monthly",
+        selectionMode: "manual",
+        periodKey: "2026-11",
+        articleIds: ["a1"],
+        topics: ["architecture"],
+        editorialNote: { en: "Note", ar: "ملاحظة" },
+        publishedAt: "2026-11-25",
+        createdAt: "2026-11-25",
+        updatedAt: "2026-11-25",
+        status: "published",
+        source: "manual",
+      },
+    ],
+    issues: [],
+    allKnowledgeRaw: [
+      {
+        id: "k1",
+        title: { en: "Zero Trust", ar: "انعدام الثقة" },
+        summary: { en: "Security note", ar: "ملاحظة أمان" },
+        category: "security",
+        entryType: "personal-note",
+        tags: ["security"],
+        sourceAttribution: "Self",
+        createdAt: "2026-11-22",
+        updatedAt: "2026-11-22",
+        status: "published",
+        source: "manual",
+      },
+    ],
+    experience: { items: [{ id: "e1", kind: "Professional" }] },
+    mediaAssets: [
+      { id: "m1", mediaType: "pdf", sizeBytes: 2048, url: "https://drive.google.com/file/d/1/view", source: "google-drive" },
+      { id: "m2", mediaType: "image", sizeBytes: 1024, url: "https://raw.githubusercontent.com/a/b/main/x.png", source: "github-repo" },
+    ],
+    github: {
+      repositories: [{ id: "r1", name: "hub", stars: 10, forks: 2, sizeKb: 120, primaryLanguage: "TypeScript" }],
+      languages: { languages: [{ id: "l1", language: "TypeScript", percentage: 85 }] },
+      contributions: { calendar: { weeks: [{ contributionDays: [{ date: "2026-11-01", contributionCount: 4 }] }] } },
+      commits: [],
+    },
+  } as unknown as HubDatasets;
+
+  const accounts = [
+    { id: "u1", username: "owner", displayName: "Owner", role: "Owner" as const, salt: "s", hash: "h", iterations: 1, algorithm: "PBKDF2-SHA-256" as const, createdAt: "", updatedAt: "" },
+    { id: "u2", username: "author", displayName: "Author", role: "Author" as const, salt: "s", hash: "h", iterations: 1, algorithm: "PBKDF2-SHA-256" as const, createdAt: "", updatedAt: "" },
+  ];
+
+  const roleMetrics = computeRoleDashboardMetrics(sample, "Author", "en", accounts, []);
+  assert.equal(roleMetrics.articleDepths[0].words, 300);
+  assert.equal(roleMetrics.topTopics[0].topic, "architecture");
+  assert.equal(roleMetrics.roleDistribution.find((r) => r.role === "Owner")?.count, 1);
+
+  const bundle = computePositionSectionMetrics(sample, "en", accounts, []);
+  assert.equal(bundle.editor.bilingualCount, 1);
+  assert.equal(bundle.media.storageMix.find((s) => s.id === "drive")?.count, 1);
+  assert.equal(bundle.media.storageMix.find((s) => s.id === "github")?.count, 1);
+  assert.equal(bundle.issues.editionBars[0].articleCount, 1);
+  assert.equal(bundle.projects.statusCounts[0].status, "Active");
+  assert.equal(bundle.knowledge.personalCount, 1);
+  assert.equal(bundle.github.monthlyActivity[0].count, 4);
+  assert.equal(bundle.settings.seoCounts.total > 0, true);
+  assert.equal(bundle.access.operatorCoverage.length, 2);
+});
+
+test("buildGitHubHeatmapModel merges GraphQL calendar days with sampled commits, computes D3 quantile thresholds, and aggregates weekday rhythm", () => {
+  const thresholds = computeIntensityThresholds([1, 2, 4, 8, 20, 47]);
+  assert.equal(quantizeActivityLevel(0, thresholds), 0);
+  assert.equal(quantizeActivityLevel(1, thresholds), 1);
+  assert.equal(quantizeActivityLevel(47, thresholds), 4);
+
+  const contributions: GitHubContributions = {
+    id: "c",
+    note: "",
+    available: true,
+    unavailableReason: null,
+    totals: {
+      totalContributions: 55,
+      totalCommitContributions: 55,
+      totalIssueContributions: 0,
+      totalPullRequestContributions: 0,
+      totalPullRequestReviewContributions: 0,
+    },
+    streaks: { currentStreak: 2, longestStreak: 4, mostActiveDay: null, weeklyTotals: [] },
+    calendar: {
+      totalContributions: 55,
+      weeks: [
+        {
+          contributionDays: [
+            { date: "2026-11-15", weekday: 0, contributionCount: 0 },
+            { date: "2026-11-16", weekday: 1, contributionCount: 8 },
+            { date: "2026-11-17", weekday: 2, contributionCount: 47 },
+          ],
+        },
+      ],
+    },
+    createdAt: "",
+    updatedAt: "",
+    status: "synced",
+    source: "graphql",
+  };
+
+  const commits: GitHubCommit[] = [
+    {
+      id: "c1",
+      sha: "abcdef123456",
+      shortSha: "abcdef1",
+      repo: "abdo",
+      repoUrl: "https://github.com/AbdoKamelAyed/abdo",
+      message: "feat: build heatmap",
+      authorName: "Abdo",
+      authorLogin: "AbdoKamelAyed",
+      url: "https://github.com/AbdoKamelAyed/abdo/commit/abcdef123456",
+      createdAt: "2026-11-17T08:24:49Z",
+      updatedAt: "2026-11-17T08:24:49Z",
+      status: "recorded",
+      source: "github-rest-repos",
+    },
+  ];
+
+  const activity: GitHubActivity[] = [
+    {
+      id: "ev1",
+      type: "PushEvent",
+      repo: "AbdoKamelAyed/abdo",
+      summary: "Pushed updates",
+      url: "https://github.com/AbdoKamelAyed/abdo",
+      createdAt: "2026-11-17T08:24:51Z",
+      updatedAt: "2026-11-17T08:24:51Z",
+      status: "public",
+      source: "github-rest-events",
+    },
+  ];
+
+  const combined = buildGitHubHeatmapModel({
+    contributions,
+    commits,
+    activity,
+    mode: "combined",
+    lang: "en",
+  });
+  assert.equal(combined.sourceKind, "graphql-calendar");
+  assert.equal(combined.totalCount, 55);
+  assert.equal(combined.activeDaysCount, 2);
+  assert.equal(combined.peakDay?.date, "2026-11-17");
+  assert.equal(combined.peakDay?.commits.length, 1);
+  assert.equal(combined.peakDay?.pushCount, 1);
+  assert.equal(combined.mostActiveWeekday?.weekday, 2);
+
+  // Commits-only mode isolates sampled commits & pushes
+  const commitsMode = buildGitHubHeatmapModel({
+    contributions,
+    commits,
+    activity,
+    mode: "commits",
+    lang: "en",
+  });
+  assert.equal(commitsMode.totalCount, 1);
+  assert.equal(commitsMode.activeDaysCount, 1);
+
+  // Fallback mode generates a clean multi-week calendar grid when GraphQL calendar is unavailable
+  const fallback = buildGitHubHeatmapModel({
+    contributions: { ...contributions, available: false, calendar: null },
+    commits,
+    activity,
+    mode: "combined",
+    lang: "ar",
+    fallbackWeeks: 10,
+  });
+  assert.equal(fallback.sourceKind, "commits-fallback");
+  assert.equal(fallback.weeks.length, 10);
+  assert.equal(fallback.totalDaysCount, 70);
+  assert.equal(fallback.peakDay?.date, "2026-11-17");
+});
+
+test("visitInsights separates admin traffic, dedupes bursts, computes public vs admin analytics, and exports CSV", () => {
+  let store = createEmptyVisitStore();
+
+  // Admin & not-found routes must never enter visitor telemetry
+  store = recordVisitEvent(store, {
+    path: "#/admin/visits",
+    section: "admin",
+    title: "Admin Workspace",
+    timestamp: "2026-11-28T10:00:00Z",
+    sessionId: "s-admin",
+  });
+  store = recordVisitEvent(store, {
+    path: "#/missing",
+    section: "not-found",
+    title: "404",
+    timestamp: "2026-11-28T10:00:05Z",
+    sessionId: "s-404",
+  });
+  assert.equal(store.totalVisits, 0);
+
+  // Public Home visit
+  store = recordVisitEvent(store, {
+    path: "#/",
+    section: "home",
+    title: "Home",
+    timestamp: "2026-11-28T10:01:00Z",
+    device: "desktop",
+    lang: "en",
+    referrerHost: "github.com",
+    sessionId: "s1",
+  });
+  // Immediate duplicate mount within 2s is ignored
+  store = recordVisitEvent(store, {
+    path: "#/",
+    section: "home",
+    title: "Home",
+    timestamp: "2026-11-28T10:01:01Z",
+    device: "desktop",
+    lang: "en",
+    referrerHost: "github.com",
+    sessionId: "s1",
+  });
+  assert.equal(store.totalVisits, 1);
+
+  // Article & Project visits
+  store = recordVisitEvent(store, {
+    path: "#/journal/edge-architecture",
+    section: "article-detail",
+    targetId: "edge-architecture",
+    title: "Edge Architecture",
+    timestamp: "2026-11-28T10:05:00Z",
+    device: "mobile",
+    lang: "ar",
+    referrerHost: "linkedin.com",
+    sessionId: "s2",
+  });
+  store = recordVisitEvent(store, {
+    path: "#/projects/hub-core",
+    section: "project-detail",
+    targetId: "hub-core",
+    title: "Hub Core",
+    timestamp: "2026-11-28T10:06:00Z",
+    device: "mobile",
+    lang: "en",
+    referrerHost: "direct",
+    sessionId: "s2",
+  });
+
+  assert.equal(store.totalVisits, 3);
+  assert.equal(getArticleViewCount(store, "edge-architecture"), 1);
+
+  const sampleArticles = [
+    { id: "a1", slug: "edge-architecture", title: { en: "Edge Architecture", ar: "معمارية الطرفية" } },
+  ] as unknown as ArticleRecord[];
+  const sampleProjects = [
+    { id: "p1", slug: "hub-core", name: { en: "Hub Core", ar: "نواة المنصة" } },
+  ] as unknown as ProjectRecord[];
+
+  const pub = getPublicVisitInsights(store, sampleArticles, "en", "2026-11-28");
+  assert.equal(pub.totalVisits, 3);
+  assert.equal(pub.uniqueVisitors, 2);
+  assert.equal(pub.todayVisits, 3);
+  assert.equal(pub.topArticle?.title, "Edge Architecture");
+  assert.equal(pub.topArticle?.views, 1);
+
+  const admin = getAdminVisitAnalytics(store, sampleArticles, sampleProjects, "en", 7, "2026-11-28");
+  assert.equal(admin.totalVisits, 3);
+  assert.equal(admin.uniqueSessions, 2);
+  assert.equal(admin.dailyTrend.length, 7);
+  assert.equal(admin.dailyTrend[6].count, 3);
+  assert.equal(admin.topArticles[0].views, 1);
+  assert.equal(admin.topProjects[0].title, "Hub Core");
+  assert.equal(admin.deviceSplit.find((d) => d.device === "mobile")?.count, 2);
+  assert.equal(admin.languageSplit.find((l) => l.lang === "ar")?.count, 1);
+
+  const csv = exportVisitsCsv(store);
+  assert.equal(csv.includes("edge-architecture"), true);
+  assert.equal(csv.includes("timestamp,section,path"), true);
+});
+
+test("socialShare resolves canonical URLs, absolute OG preview images, and multi-platform share intents", () => {
+  assert.equal(resolveAbsoluteShareUrl("https://abdokamelayed.github.io/", "#/"), "https://abdokamelayed.github.io/");
+  assert.equal(
+    resolveAbsoluteShareUrl("https://abdokamelayed.github.io", "#/journal/systems-design"),
+    "https://abdokamelayed.github.io/#/journal/systems-design"
+  );
+
+  const fallbackImg = resolveLinkPreviewImage("", "", "https://abdokamelayed.github.io/");
+  assert.equal(fallbackImg.absoluteUrl, "https://abdokamelayed.github.io/og-cover.jpg");
+  assert.equal(fallbackImg.displaySrc, "/og-cover.jpg");
+
+  const relImg = resolveLinkPreviewImage("./assets/cover.png", null, "https://abdokamelayed.github.io");
+  assert.equal(relImg.absoluteUrl, "https://abdokamelayed.github.io/assets/cover.png");
+  assert.equal(relImg.displaySrc, "/assets/cover.png");
+
+  const remoteImg = resolveLinkPreviewImage("https://cdn.example.com/pic.jpg", "/og-cover.jpg", "https://abdokamelayed.github.io");
+  assert.equal(remoteImg.absoluteUrl, "https://cdn.example.com/pic.jpg");
+
+  const links = buildSocialShareLinks({
+    url: "https://abdokamelayed.github.io/#/journal/test",
+    title: "Architecture Digest",
+    summary: "Deep dive on static hubs.",
+    tags: ["architecture", "static-web"],
+  });
+  assert.equal(links.length, 6);
+  assert.equal(links.some((l) => l.id === "x" && l.href.includes("twitter.com/intent/tweet")), true);
+  assert.equal(links.some((l) => l.id === "linkedin" && l.href.includes("linkedin.com/sharing")), true);
+  assert.equal(links.some((l) => l.id === "whatsapp" && l.href.includes("wa.me")), true);
+  assert.equal(links.some((l) => l.id === "telegram" && l.href.includes("t.me/share/url")), true);
+  assert.equal(links.some((l) => l.id === "facebook" && l.href.includes("facebook.com/sharer")), true);
+  assert.equal(links.some((l) => l.id === "email" && l.href.startsWith("mailto:?subject=")), true);
+});
+
+test("buildWorkingNowItems prioritizes custom focus items, active projects, current roles, and active repos without duplicates", () => {
+  const sample = {
+    website: {
+      updatedAt: "2026-11-28",
+      nowItems: [
+        {
+          id: "now-custom-1",
+          title: { en: "Hub v2", ar: "المنصة 2" },
+          summary: { en: "Shipping now hub.", ar: "إطلاق التحديث." },
+          status: { en: "Active", ar: "نشط" },
+          focusArea: { en: "Platform", ar: "المنصة" },
+          tags: ["React", "TypeScript"],
+        },
+      ],
+    },
+    projects: [
+      {
+        id: "p1",
+        slug: "hub-v2",
+        name: { en: "Hub v2", ar: "المنصة 2" },
+        shortDescription: { en: "Duplicate title project", ar: "مكرر" },
+        category: "web",
+        status: "Active",
+        sortOrder: 1,
+        techStack: ["React"],
+        updatedAt: "2026-11-25",
+      },
+      {
+        id: "p2",
+        slug: "edge-cli",
+        name: { en: "Edge CLI", ar: "أداة الطرفية" },
+        shortDescription: { en: "Fast builder CLI", ar: "أداة بناء سريعة" },
+        category: "cli",
+        status: "In Development",
+        sortOrder: 2,
+        techStack: ["Node", "TypeScript"],
+        githubRepoSlug: "edge-cli",
+        updatedAt: "2026-11-26",
+      },
+    ],
+    experience: {
+      items: [
+        {
+          id: "e1",
+          role: { en: "Systems Engineer", ar: "مهندس أنظمة" },
+          organization: { en: "Independent", ar: "مستقل" },
+          kind: "Engineering",
+          period: "2025 – Present",
+          status: "active",
+          summary: { en: "Building local-first tools.", ar: "بناء أدوات محلية." },
+          skills: ["TS", "D3"],
+          updatedAt: "2026-11-20",
+        },
+      ],
+    },
+    github: {
+      repositories: [
+        {
+          id: "r1",
+          name: "edge-cli",
+          fullName: "AbdoKamelAyed/edge-cli",
+          description: "Already linked to p2",
+          primaryLanguage: "TypeScript",
+          isArchived: false,
+          isFork: false,
+          pushedAt: "2026-11-27T00:00:00Z",
+          updatedAt: "2026-11-27T00:00:00Z",
+          topics: ["cli"],
+        },
+        {
+          id: "r2",
+          name: "astro-notes",
+          fullName: "AbdoKamelAyed/astro-notes",
+          description: "Static knowledge notes",
+          primaryLanguage: "Markdown",
+          isArchived: false,
+          isFork: false,
+          pushedAt: "2026-11-26T00:00:00Z",
+          updatedAt: "2026-11-26T00:00:00Z",
+          topics: ["docs"],
+        },
+      ],
+    },
+  } as unknown as HubDatasets;
+
+  const items = buildWorkingNowItems(sample, "en");
+  assert.equal(items[0].kind, "focus");
+  assert.equal(items[0].title, "Hub v2");
+  assert.equal(items.some((i) => i.title === "Edge CLI" && i.kind === "project"), true);
+  assert.equal(items.some((i) => i.kind === "role" && i.title.includes("Systems Engineer")), true);
+  assert.equal(items.some((i) => i.title === "edge-cli" && i.kind === "repository"), false);
+  assert.equal(items.some((i) => i.title === "astro-notes" && i.kind === "repository"), true);
+  assert.equal(buildWorkingNowItems(sample, "en", 2).length, 2);
+
+  assert.deepEqual(parseAppRoute("#/now"), { kind: "now", path: "#/now" });
+  assert.equal(toLegacyRoute({ kind: "now", path: "#/now" }).section, "now");
+});
+
+test("applyArticleFontScale scopes typography CSS variable without mutating root html fontSize", () => {
+  const props = new Map<string, string>();
+  const attrs = new Map<string, string>();
+  const origDoc = (globalThis as Record<string, unknown>).document;
+  let rootFontSizeRemoved = false;
+
+  (globalThis as Record<string, unknown>).document = {
+    documentElement: {
+      setAttribute: (k: string, v: string) => attrs.set(k, v),
+      style: {
+        fontSize: "20px",
+        removeProperty: (k: string) => {
+          if (k === "font-size") rootFontSizeRemoved = true;
+        },
+        setProperty: (k: string, v: string) => props.set(k, v),
+      },
+    },
+  };
+
+  try {
+    const def = applyArticleFontScale("large");
+    assert.equal(def.rootFontSizePx, 18);
+    assert.equal(rootFontSizeRemoved, true);
+    assert.equal(props.get("--hub-article-font-size"), "18px");
+    assert.equal(attrs.get("data-article-font-scale"), "large");
+  } finally {
+    (globalThis as Record<string, unknown>).document = origDoc;
+  }
+});
+
+test("seoEngine generates sitemap with #/now and injects absolute og:image & twitter:image metadata", () => {
+  const metas = new Map<string, string>();
+  const links = new Map<string, string>();
+  let scriptElRef: Record<string, unknown> | null = null;
+  const origDoc = (globalThis as Record<string, unknown>).document;
+
+  const makeEl = (tag: string) => {
+    const el: Record<string, unknown> = {
+      tagName: tag,
+      attributes: {} as Record<string, string>,
+      textContent: "",
+      setAttribute(k: string, v: string) {
+        (this.attributes as Record<string, string>)[k] = v;
+        if (tag === "meta") {
+          const key = (this.attributes as Record<string, string>).name || (this.attributes as Record<string, string>).property;
+          if (key && k === "content") metas.set(key, v);
+        }
+        if (tag === "link" && (this.attributes as Record<string, string>).rel && k === "href") {
+          links.set((this.attributes as Record<string, string>).rel, v);
+        }
+      },
+      remove() {},
+    };
+    return el;
+  };
+
+  const head = {
+    appendChild(node: Record<string, unknown>) {
+      if (node.tagName === "script") {
+        scriptElRef = node;
+      }
+      if (node.tagName === "meta") {
+        const a = node.attributes as Record<string, string>;
+        const key = a.name || a.property;
+        if (key && a.content !== undefined) metas.set(key, a.content);
+      }
+      if (node.tagName === "link") {
+        const a = node.attributes as Record<string, string>;
+        if (a.rel && a.href !== undefined) links.set(a.rel, a.href);
+      }
+    },
+  };
+
+  const canonicalMock = makeEl("link");
+  canonicalMock.setAttribute("rel", "canonical");
+
+  (globalThis as Record<string, unknown>).document = {
+    title: "",
+    head,
+    querySelector: (selector: string) =>
+      selector === 'link[rel="canonical"]' ? canonicalMock : null,
+    getElementById: () => null,
+    createElement: (tag: string) => makeEl(tag),
+  };
+
+  try {
+    const sample = {
+      website: {
+        siteName: "ABDO Hub",
+        shortTitle: "ABDO",
+        domain: "https://abdokamelayed.github.io",
+        ogImage: "/og-cover.jpg",
+        seoDescription: { en: "Personal digital hub", ar: "المنصة الشخصية" },
+        updatedAt: "2026-11-28",
+      },
+      profileSettings: {
+        fullName: { en: "Abdo Kamel", ar: "عبدو كامل" },
+        githubUsername: "AbdoKamelAyed",
+        avatarUrl: "/avatar.jpg",
+        shortBio: { en: "Engineer", ar: "مهندس" },
+        contact: { github: "", linkedin: "" },
+      },
+      articles: [],
+      projects: [],
+      issues: [],
+      knowledge: [],
+    } as unknown as HubDatasets;
+
+    const xml = generateSitemapXml(sample);
+    assert.equal(xml.includes("https://abdokamelayed.github.io/#/now"), true);
+
+    applyPageSeoMetadata(sample, { section: "now", param: null, subParam: null }, "en");
+    assert.equal(metas.get("og:image"), "https://abdokamelayed.github.io/og-cover.jpg");
+    assert.equal(metas.get("twitter:image"), "https://abdokamelayed.github.io/og-cover.jpg");
+    assert.equal(metas.get("og:url"), "https://abdokamelayed.github.io/#/now");
+    assert.equal(links.get("canonical"), "https://abdokamelayed.github.io/#/now");
+    const finalLd = String(scriptElRef ? (scriptElRef as { textContent?: string }).textContent || "" : "");
+    assert.equal(finalLd.includes("https://abdokamelayed.github.io/og-cover.jpg"), true);
+  } finally {
+    (globalThis as Record<string, unknown>).document = origDoc;
+  }
+});
+
+test("uploadFileToGitHubRepo retries once on 409 Conflict with fresh SHA and surfaces clear 403 error", async () => {
+  const target = resolveGitHubSyncTargetFromSettings({
+    storageOwner: "",
+    username: "AbdoKamelAyed",
+    storageRepo: "",
+    storageBranch: "",
+  });
+  assert.deepEqual(target, {
+    owner: "AbdoKamelAyed",
+    repo: "AbdoKamelAyed.github.io",
+    branch: "main",
+  });
+
+  let getCount = 0;
+  let putCount = 0;
+  const putShas: (string | undefined)[] = [];
+
+  const mockFetch = (async (_url: string, init?: RequestInit) => {
+    const method = (init?.method || "GET").toUpperCase();
+    if (method === "GET") {
+      getCount += 1;
+      const sha = getCount === 1 ? "stale-sha-1" : "fresh-sha-2";
+      return new Response(JSON.stringify({ sha }), { status: 200 });
+    }
+    putCount += 1;
+    const body = JSON.parse(String(init?.body || "{}")) as { sha?: string };
+    putShas.push(body.sha);
+    if (putCount === 1) {
+      return new Response(JSON.stringify({ message: "does not match" }), { status: 409 });
+    }
+    return new Response(
+      JSON.stringify({
+        content: {
+          path: "public/data/journal/articles.json",
+          sha: "committed-sha-3",
+          html_url: "https://github.com/AbdoKamelAyed/abdokamelayed.github.io/blob/main/public/data/journal/articles.json",
+          download_url: "https://raw.githubusercontent.com/AbdoKamelAyed/abdokamelayed.github.io/main/public/data/journal/articles.json",
+        },
+      }),
+      { status: 200 }
+    );
+  }) as unknown as typeof fetch;
+
+  const res = await uploadFileToGitHubRepo({
+    token: "ghp_test",
+    owner: "AbdoKamelAyed",
+    repo: "abdokamelayed.github.io",
+    branch: "main",
+    folder: "public/data/journal",
+    fileName: "articles.json",
+    contentBase64: utf8ToBase64('{"items":[]}'),
+    allowOverwrite: true,
+    fetchImpl: mockFetch,
+  });
+
+  assert.equal(getCount, 2);
+  assert.equal(putCount, 2);
+  assert.deepEqual(putShas, ["stale-sha-1", "fresh-sha-2"]);
+  assert.equal(res.sha, "committed-sha-3");
+
+  const forbiddenFetch = (async (_url: string, init?: RequestInit) => {
+    const method = (init?.method || "GET").toUpperCase();
+    if (method === "GET") return new Response("", { status: 404 });
+    return new Response(JSON.stringify({ message: "Resource not accessible by personal access token" }), { status: 403 });
+  }) as unknown as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      uploadFileToGitHubRepo({
+        token: "ghp_bad",
+        owner: "AbdoKamelAyed",
+        repo: "abdokamelayed.github.io",
+        branch: "main",
+        folder: "public/data/journal",
+        fileName: "articles.json",
+        contentBase64: utf8ToBase64('{"items":[]}'),
+        allowOverwrite: true,
+        fetchImpl: forbiddenFetch,
+      }),
+    /Contents: Read & write/
+  );
+});
 
 
 

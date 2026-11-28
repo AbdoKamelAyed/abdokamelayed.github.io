@@ -4,10 +4,10 @@ import type { HubDatasets, Lang } from "../types/hub";
 import { filterAndSortRepos, safeUrl } from "../utils/analytics";
 import { formatDate, L, t } from "../utils/i18n";
 import {
-  ContributionCalendarPanel,
   LanguageDistributionChart,
   RepoCreationChart,
 } from "../components/Charts";
+import { GitHubCommitHeatmap } from "../components/GitHubCommitHeatmap";
 
 export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, lang }) => {
   const gh = data.github;
@@ -51,8 +51,8 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
       </header>
 
       {/* Profile Overview */}
-      <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-        <div className="flex items-center gap-4 min-w-0">
+      <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-4 min-w-0 w-full">
           {safeUrl(p.avatarUrl) ? (
             <img
               src={safeUrl(p.avatarUrl)}
@@ -65,11 +65,11 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
               A
             </div>
           )}
-          <div className="min-w-0 space-y-1">
-            <h2 className="font-display text-xl font-bold truncate">
+          <div className="min-w-0 flex-1 space-y-1">
+            <h2 className="font-display text-xl font-bold break-words [overflow-wrap:anywhere]">
               {p.name || p.username} <span className="font-mono text-sm font-normal text-[var(--hub-text-muted)]">@{p.username}</span>
             </h2>
-            <p className="text-sm text-[var(--hub-text-muted)]">{p.bio || t("common.na", lang)}</p>
+            <p className="text-sm text-[var(--hub-text-muted)] break-words">{p.bio || t("common.na", lang)}</p>
             <div className="text-xs text-[var(--hub-text-muted)] font-mono tabular-nums flex flex-wrap gap-x-3 gap-y-1">
               <span>{L("Repos", "المستودعات", lang)}: {valOrNA(p.publicRepos)}</span>
               <span>{L("Gists", "مقتطفات", lang)}: {valOrNA(p.publicGists)}</span>
@@ -112,15 +112,20 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
         </div>
       </section>
 
-      {/* Contribution Calendar */}
-      <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+      {/* Contribution & Commit Activity Heatmap (D3.js) */}
+      <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-4 min-w-0 overflow-hidden">
         <div>
           <h2 className="font-display text-xl font-semibold">
-            {L("Contribution Intelligence", "تحليلات المساهمات", lang)}
+            {L("Contribution & Commit Activity Heatmap", "خريطة نشاط المساهمات والالتزامات", lang)}
           </h2>
           <p className="text-xs text-[var(--hub-text-muted)] mt-1">{t("github.disclaimerContrib", lang)}</p>
         </div>
-        <ContributionCalendarPanel contributions={gh.contributions} lang={lang} />
+        <GitHubCommitHeatmap
+          contributions={gh.contributions}
+          commits={gh.commits}
+          activity={gh.activity}
+          lang={lang}
+        />
       </section>
 
       {/* Charts */}
@@ -208,17 +213,17 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {repos.map((r) => (
-              <article key={r.id} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-display font-semibold text-base min-w-0">
+              <article key={r.id} className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 space-y-3 min-w-0 overflow-hidden">
+                <div className="flex items-start justify-between gap-3 min-w-0">
+                  <h3 className="font-display font-semibold text-base min-w-0 flex-1">
                     <a
                       href={safeUrl(r.url)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="hover:underline inline-flex items-center gap-1"
+                      className="hover:underline flex max-w-full min-w-0 items-start gap-1"
                     >
-                      <span className="truncate">{r.name}</span>
-                      <ArrowUpRight className="w-4 h-4 shrink-0" />
+                      <span className="min-w-0 break-words [overflow-wrap:anywhere]">{r.name}</span>
+                      <ArrowUpRight className="w-4 h-4 shrink-0 mt-0.5" />
                     </a>
                   </h3>
                   <span className="text-xs font-mono text-[var(--hub-text-muted)] shrink-0">
@@ -227,7 +232,7 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
                   </span>
                 </div>
 
-                <p className="text-sm text-[var(--hub-text-muted)]">
+                <p className="text-sm text-[var(--hub-text-muted)] break-words">
                   {r.description || L("No repository description provided.", "لا يوجد وصف للمستودع.", lang)}
                 </p>
 
@@ -258,25 +263,25 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
 
       {/* Commits & Timeline */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+        <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-4 min-w-0 overflow-hidden">
           <h2 className="font-display text-xl font-semibold">
             {L("Recent Commits (Public Repos)", "أحدث الالتزامات (المستودعات العامة)", lang)}
           </h2>
           {gh.commits.length === 0 ? (
             <p className="text-sm text-[var(--hub-text-muted)]">{t("common.empty", lang)}</p>
           ) : (
-            <ul className="divide-y divide-[var(--hub-border)]">
+            <ul className="divide-y divide-[var(--hub-border)] min-w-0">
               {gh.commits.slice(0, 12).map((c) => (
-                <li key={c.id} className="py-3 space-y-1">
+                <li key={c.id} className="py-3 space-y-1 min-w-0">
                   <a
                     href={safeUrl(c.url)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-medium hover:underline block"
+                    className="text-sm font-medium hover:underline block break-words [overflow-wrap:anywhere]"
                   >
                     {c.message}
                   </a>
-                  <div className="text-xs font-mono text-[var(--hub-text-muted)]">
+                  <div className="text-xs font-mono text-[var(--hub-text-muted)] break-words [overflow-wrap:anywhere]">
                     {c.repo} · {c.shortSha} · {c.authorName} · {formatDate(c.createdAt, lang)}
                   </div>
                 </li>
@@ -285,25 +290,25 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
           )}
         </div>
 
-        <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+        <div className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-4 min-w-0 overflow-hidden">
           <h2 className="font-display text-xl font-semibold">
             {L("Development Activity Timeline", "الخط الزمني لنشاط التطوير", lang)}
           </h2>
           {gh.activity.length === 0 ? (
             <p className="text-sm text-[var(--hub-text-muted)]">{t("common.empty", lang)}</p>
           ) : (
-            <ul className="divide-y divide-[var(--hub-border)]">
+            <ul className="divide-y divide-[var(--hub-border)] min-w-0">
               {gh.activity.slice(0, 14).map((ev) => (
-                <li key={ev.id} className="py-3 space-y-1">
+                <li key={ev.id} className="py-3 space-y-1 min-w-0">
                   <a
                     href={safeUrl(ev.url)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-medium hover:underline block"
+                    className="text-sm font-medium hover:underline block break-words [overflow-wrap:anywhere]"
                   >
                     {ev.summary}
                   </a>
-                  <div className="text-xs font-mono text-[var(--hub-text-muted)]">
+                  <div className="text-xs font-mono text-[var(--hub-text-muted)] break-words">
                     {ev.type} · {formatDate(ev.createdAt, lang)}
                   </div>
                 </li>
@@ -314,15 +319,20 @@ export const GithubPage: React.FC<{ data: HubDatasets; lang: Lang }> = ({ data, 
       </section>
 
       {gh.releases.length > 0 && (
-        <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-6 space-y-4">
+        <section className="rounded-2xl border border-[var(--hub-border)] hub-surface p-5 sm:p-6 space-y-4 min-w-0 overflow-hidden">
           <h2 className="font-display text-xl font-semibold">{L("Published Releases", "الإصدارات المنشورة", lang)}</h2>
-          <ul className="divide-y divide-[var(--hub-border)]">
+          <ul className="divide-y divide-[var(--hub-border)] min-w-0">
             {gh.releases.slice(0, 10).map((rel) => (
-              <li key={rel.id} className="py-3 flex items-center justify-between gap-4 text-sm">
-                <a href={safeUrl(rel.url)} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline">
+              <li key={rel.id} className="py-3 flex flex-wrap items-center justify-between gap-2 text-sm min-w-0">
+                <a
+                  href={safeUrl(rel.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium hover:underline min-w-0 break-words [overflow-wrap:anywhere]"
+                >
                   {rel.repo} — {rel.tagName} ({rel.name})
                 </a>
-                <span className="text-xs font-mono text-[var(--hub-text-muted)]">{formatDate(rel.createdAt, lang)}</span>
+                <span className="text-xs font-mono text-[var(--hub-text-muted)] shrink-0">{formatDate(rel.createdAt, lang)}</span>
               </li>
             ))}
           </ul>

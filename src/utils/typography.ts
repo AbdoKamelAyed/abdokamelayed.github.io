@@ -70,12 +70,18 @@ export function getFontScaleLabel(scale: FontScale, lang: Lang): string {
   return getFontScaleDefinition(scale).label[lang];
 }
 
-export function applyFontScaleToDocument(scale: FontScale): FontScaleDefinition {
+export function applyArticleFontScale(scale: FontScale): FontScaleDefinition {
   const def = getFontScaleDefinition(scale);
   if (typeof document === "undefined") return def;
   const root = document.documentElement;
+  root.setAttribute("data-article-font-scale", def.id);
   root.setAttribute("data-font-scale", def.id);
-  root.style.fontSize = `${def.rootFontSizePx}px`;
+  root.style.removeProperty("font-size");
+  root.style.setProperty("--hub-article-font-size", `${def.rootFontSizePx}px`);
   root.style.setProperty("--hub-font-scale", String(def.multiplier));
   return def;
+}
+
+export function applyFontScaleToDocument(scale: FontScale): FontScaleDefinition {
+  return applyArticleFontScale(scale);
 }
